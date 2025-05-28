@@ -50,6 +50,11 @@ func main() {
 	hashFunc.Write(A.Bytes())
 	hashOfA := hashFunc.Sum(nil)
 
+	// Print variables
+	fmt.Println("A (private):", A)
+	fmt.Println("B (public):", B)
+	fmt.Println("Hash of A (public):", new(big.Int).SetBytes(hashOfA))
+
 	// Change value of A
 	//A = big.NewInt(30) // This will not affect the hash since we are using the original value for hashing
 
@@ -106,4 +111,7 @@ func main() {
 	} else {
 		fmt.Println("✅ Proof verified successfully!")
 	}
+
+	// Extract and print all public variables
+	fmt.Println("Public witness values:", publicWitness.Vector())
 }
