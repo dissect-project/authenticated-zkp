@@ -42,11 +42,17 @@ func (c *CompareAndVerifyCircuit) Define(api frontend.API) error {
 }
 
 func main() {
-	// Input values
-	A := big.NewInt(25)              // private
-	B := big.NewInt(40)              // public
-	hashFunc := mimcNative.NewMiMC() // native hash
+	// Check if the correct number of arguments is provided
+	if len(os.Args) != 2 {
+		fmt.Println("Please provide exactly one argument")
+		return
+	}
 
+	// Input values
+	A := big.NewInt(25) // private
+	B := big.NewInt(40) // public
+
+	hashFunc := mimcNative.NewMiMC() // native hash
 	hashFunc.Write(A.Bytes())
 	hashOfA := hashFunc.Sum(nil)
 
@@ -54,9 +60,6 @@ func main() {
 	fmt.Println("A (private):", A)
 	fmt.Println("B (public):", B)
 	fmt.Println("Hash of A (public):", new(big.Int).SetBytes(hashOfA))
-
-	// Change value of A
-	//A = big.NewInt(30) // This will not affect the hash since we are using the original value for hashing
 
 	// Compile the circuit
 	var circuit CompareAndVerifyCircuit
@@ -73,11 +76,6 @@ func main() {
 	}
 
 	witness, err := frontend.NewWitness(&assignment, ecc.BN254.ScalarField())
-	if err != nil {
-		panic(err)
-	}
-
-	publicWitness, err := witness.Public()
 	if err != nil {
 		panic(err)
 	}
@@ -101,6 +99,37 @@ func main() {
 		os.Exit(1)
 	} else {
 		fmt.Println("✅ Proof generated successfully!")
+	}
+
+	// Get the tamper argument from command line
+	arg := os.Args[1]
+
+	// Check if the argument is "tamper"
+	if arg == "tamper" {
+		fmt.Println("Executing tampering of witness...")
+		// Simulate the tampering of A's hash
+		tamperedA := big.NewInt(35)
+
+		tamperedHashFunc := mimcNative.NewMiMC() // native hash
+		tamperedHashFunc.Write(tamperedA.Bytes())
+		tamperedHashOfA := tamperedHashFunc.Sum(nil)
+
+		// Create a new witness with the tampered value
+		tamperedAssignment := CompareAndVerifyCircuit{
+			A:     A,
+			B:     B,
+			HashA: new(big.Int).SetBytes(tamperedHashOfA),
+		}
+
+		witness, _ = frontend.NewWitness(&tamperedAssignment, ecc.BN254.ScalarField())
+	} else {
+		fmt.Println("No witness tampering requested.")
+	}
+
+	// Create public witness (only public inputs)
+	publicWitness, err := witness.Public()
+	if err != nil {
+		panic(err)
 	}
 
 	// Verify

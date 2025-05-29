@@ -19,3 +19,16 @@ Testing ground for verifiable zero-knowledge proofs.
         - Today
         - Minimum Age
         - Hash of DOB
+
+## Execution
+
+Before executing each script, **go** should be installed on the machine. To execute the scripts, run the following command in the directory of the script to execute the respective example without tampering the witness (changing the hash of the private input after computing the proof):
+
+```go
+go run . notamper
+```
+
+To execute the example with tampering of the witness (change the value of the private input's hash after computing the proof), run the following command:
+```go
+go run . tamper
+```

@@ -48,6 +48,12 @@ func (c *OverAgeVerifyCircuit) Define(api frontend.API) error {
 }
 
 func main() {
+	// Check if the correct number of arguments is provided
+	if len(os.Args) != 2 {
+		fmt.Println("Please provide exactly one argument")
+		return
+	}
+
 	// Input values
 	// Minimum age in years
 	minAge := big.NewInt(18) // This is a public variable
@@ -62,17 +68,12 @@ func main() {
 	// Hash the birth date using MiMC
 	hashFunc := mimcNative.NewMiMC() // native hash
 	hashFunc.Write(DOB.Bytes())
-	hashOfA := hashFunc.Sum(nil)
+	hashOfDOB := hashFunc.Sum(nil)
 
 	// Print variables
 	fmt.Println("DOB (private):", DOB)
 	fmt.Println("TODAY (public):", Today)
-	fmt.Println("Hash of DOB (public):", new(big.Int).SetBytes(hashOfA))
-
-	// Change value of DOB
-	//newBirthDateStr := "19980816"
-	//DOB = new(big.Int)
-	//DOB.SetString(newBirthDateStr, 10) // base 10
+	fmt.Println("Hash of DOB (public):", new(big.Int).SetBytes(hashOfDOB))
 
 	// Compile the circuit
 	var circuit OverAgeVerifyCircuit
@@ -86,15 +87,10 @@ func main() {
 		DOB:     DOB,
 		Today:   Today,
 		MinAge:  minAge,
-		HashAge: new(big.Int).SetBytes(hashOfA),
+		HashAge: new(big.Int).SetBytes(hashOfDOB),
 	}
 
 	witness, err := frontend.NewWitness(&assignment, ecc.BN254.ScalarField())
-	if err != nil {
-		panic(err)
-	}
-
-	publicWitness, err := witness.Public()
 	if err != nil {
 		panic(err)
 	}
@@ -118,6 +114,41 @@ func main() {
 		os.Exit(1)
 	} else {
 		fmt.Println("✅ Proof generated successfully!")
+	}
+
+	// Get the tamper argument from command line
+	arg := os.Args[1]
+
+	// Check if the argument is "tamper"
+	if arg == "tamper" {
+		fmt.Println("Executing tampering of witness...")
+		// Simulate the tampering of DOB's hash
+		newBirthDateStr := "19980816"
+		DOB = new(big.Int)
+		DOB.SetString(newBirthDateStr, 10) // base 10
+
+		tamperedHashFunc := mimcNative.NewMiMC() // native hash
+		tamperedHashFunc.Write(DOB.Bytes())
+		tamperedHashOfDOB := tamperedHashFunc.Sum(nil)
+
+		// Create a new witness with the tampered value
+		// Create witness
+		tamperedAssignment := OverAgeVerifyCircuit{
+			DOB:     DOB,
+			Today:   Today,
+			MinAge:  minAge,
+			HashAge: new(big.Int).SetBytes(tamperedHashOfDOB),
+		}
+
+		witness, _ = frontend.NewWitness(&tamperedAssignment, ecc.BN254.ScalarField())
+	} else {
+		fmt.Println("No witness tampering requested.")
+	}
+
+	// Create public witness (only public inputs)
+	publicWitness, err := witness.Public()
+	if err != nil {
+		panic(err)
 	}
 
 	// Verify
