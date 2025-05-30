@@ -54,6 +54,24 @@ func main() {
 		return
 	}
 
+	// Compile the circuit
+	var circuit OverAgeVerifyCircuit
+	ccs, err := frontend.Compile(ecc.BN254.ScalarField(), scs.NewBuilder, &circuit)
+	if err != nil {
+		panic(err)
+	}
+
+	// Setup
+	scs := ccs.(*cs.SparseR1CS)
+	srs, srsLagrange, err := unsafekzg.NewSRS(scs)
+	if err != nil {
+		panic(err)
+	}
+	pk, vk, err := plonk.Setup(ccs, srs, srsLagrange)
+	if err != nil {
+		panic(err)
+	}
+
 	// Input values
 	// Minimum age in years
 	minAge := big.NewInt(18) // This is a public variable
@@ -75,13 +93,6 @@ func main() {
 	fmt.Println("TODAY (public):", Today)
 	fmt.Println("Hash of DOB (public):", new(big.Int).SetBytes(hashOfDOB))
 
-	// Compile the circuit
-	var circuit OverAgeVerifyCircuit
-	ccs, err := frontend.Compile(ecc.BN254.ScalarField(), scs.NewBuilder, &circuit)
-	if err != nil {
-		panic(err)
-	}
-
 	// Create witness
 	assignment := OverAgeVerifyCircuit{
 		DOB:     DOB,
@@ -91,17 +102,6 @@ func main() {
 	}
 
 	witness, err := frontend.NewWitness(&assignment, ecc.BN254.ScalarField())
-	if err != nil {
-		panic(err)
-	}
-
-	// Setup
-	scs := ccs.(*cs.SparseR1CS)
-	srs, srsLagrange, err := unsafekzg.NewSRS(scs)
-	if err != nil {
-		panic(err)
-	}
-	pk, vk, err := plonk.Setup(ccs, srs, srsLagrange)
 	if err != nil {
 		panic(err)
 	}
