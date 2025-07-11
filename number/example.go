@@ -48,6 +48,26 @@ func main() {
 		return
 	}
 
+	// Compile the circuit
+	var circuit CompareAndVerifyCircuit
+	ccs, err := frontend.Compile(ecc.BN254.ScalarField(), scs.NewBuilder, &circuit)
+	if err != nil {
+		panic(err)
+	}
+
+	// Setup
+	scs := ccs.(*cs.SparseR1CS)
+	srs, srsLagrange, err := unsafekzg.NewSRS(scs)
+	if err != nil {
+		panic(err)
+	}
+
+	pk, vk, err := plonk.Setup(ccs, srs, srsLagrange)
+	if err != nil {
+		panic(err)
+	}
+	//fmt.Printf("vk: %d, %d\n", vk, unsafe.Sizeof(vk))
+
 	// Input values
 	A := big.NewInt(25) // private
 	B := big.NewInt(40) // public
@@ -61,13 +81,6 @@ func main() {
 	fmt.Println("B (public):", B)
 	fmt.Println("Hash of A (public):", new(big.Int).SetBytes(hashOfA))
 
-	// Compile the circuit
-	var circuit CompareAndVerifyCircuit
-	ccs, err := frontend.Compile(ecc.BN254.ScalarField(), scs.NewBuilder, &circuit)
-	if err != nil {
-		panic(err)
-	}
-
 	// Create witness
 	assignment := CompareAndVerifyCircuit{
 		A:     A,
@@ -76,17 +89,6 @@ func main() {
 	}
 
 	witness, err := frontend.NewWitness(&assignment, ecc.BN254.ScalarField())
-	if err != nil {
-		panic(err)
-	}
-
-	// Setup
-	scs := ccs.(*cs.SparseR1CS)
-	srs, srsLagrange, err := unsafekzg.NewSRS(scs)
-	if err != nil {
-		panic(err)
-	}
-	pk, vk, err := plonk.Setup(ccs, srs, srsLagrange)
 	if err != nil {
 		panic(err)
 	}
