@@ -182,31 +182,49 @@ func main() {
 		fmt.Println("✅ Proof generated successfully!")
 	}
 
-	/*
-		// Get the tamper argument from command line
-		arg := os.Args[1]
-		// Check if the argument is "tamper"
-		if arg == "tamper" {
-			fmt.Println("Executing tampering of witness...")
-			// Simulate the tampering of Country's hash
-			CountryStr := "Spain"
+	// Get the tamper argument from command line
+	arg := os.Args[1]
+	// Check if the argument is "tamper"
+	if arg == "tamper" {
+		fmt.Println("Executing tampering of witness...")
+		// Input values
+		// Latitude and Longitude
+		newlat1f, newlon1f := 37.774901, -122.419401
 
-			tamperedHashFunc := mimcNative.NewMiMC() // native hash
-			tamperedHashFunc.Write([]byte(CountryStr))
-			tamperedHashOfDOB := tamperedHashFunc.Sum(nil)
+		// Convert to fixed-point signed integers
+		newlat1 := int64(newlat1f * float64(scale))
+		newlon1 := int64(newlon1f * float64(scale))
 
-			// Create a new witness with the tampered value
-			// Create witness
-			tamperedAssignment := AddressDistanceCircuit{
-				Country:     []byte(CountryStr),
-				HashCountry: new(big.Int).SetBytes(tamperedHashOfDOB),
-			}
+		// Scale lat/lon by 1e6
+		// Private inputs (Lat1, Lon1)
+		newLat1 := SignedInt64ToField(newlat1, q)
+		newLon1 := SignedInt64ToField(newlon1, q)
 
-			witness, _ = frontend.NewWitness(&tamperedAssignment, ecc.BN254.ScalarField())
-		} else {
-			fmt.Println("No witness tampering requested.")
+		// Hash the Latitude using MiMC
+		tamperedHashFunc1 := mimcNative.NewMiMC() // native hash
+		tamperedHashFunc1.Write(newLat1.Bytes())
+		tamperedHashOfLat := tamperedHashFunc1.Sum(nil)
+		// Hash the Longitude using MiMC
+		tamperedHashFunc2 := mimcNative.NewMiMC() // native hash
+		tamperedHashFunc2.Write(newLon1.Bytes())
+		tamperedHashOfLon := tamperedHashFunc2.Sum(nil)
+
+		// Create a new witness with the tampered value
+		// Create witness
+		tamperedAssignment := AddressDistanceCircuit{
+			Lat1:     Lat1,
+			Lon1:     Lon1,
+			Lat2:     Lat2,
+			Lon2:     Lon2,
+			Distance: Distance,
+			HashLat:  new(big.Int).SetBytes(tamperedHashOfLat),
+			HashLon:  new(big.Int).SetBytes(tamperedHashOfLon),
 		}
-	*/
+
+		witness, _ = frontend.NewWitness(&tamperedAssignment, ecc.BN254.ScalarField())
+	} else {
+		fmt.Println("No witness tampering requested.")
+	}
 
 	// Create public witness (only public inputs)
 	publicWitness, err := witness.Public()
