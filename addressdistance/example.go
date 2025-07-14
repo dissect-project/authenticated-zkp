@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"math"
 	"math/big"
 	"os"
 
@@ -25,45 +24,45 @@ type AddressDistanceCircuit struct {
 	HashLon    frontend.Variable `gnark:"hash_lon,public"` // Public
 }
 
-func haversine(lat1, lon1, lat2, lon2 float64) float64 {
-	const R = 6371 // Earth radius in km
-	phi1 := lat1 * math.Pi / 180
-	phi2 := lat2 * math.Pi / 180
-	deltaPhi := (lat2 - lat1) * math.Pi / 180
-	deltaLambda := (lon2 - lon1) * math.Pi / 180
+func abs(x int64) int64 {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
 
-	a := math.Sin(deltaPhi/2)*math.Sin(deltaPhi/2) +
-		math.Cos(phi1)*math.Cos(phi2)*math.Sin(deltaLambda/2)*math.Sin(deltaLambda/2)
-	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
-	return R * c // distance in km
+func SignedInt64ToField(x int64, q *big.Int) *big.Int {
+	val := big.NewInt(x)
+	if x < 0 {
+		val.Add(val, q) // ensure it's in the field (mod q)
+	}
+	return val
 }
 
 // Define defines the circuit's constraints
 func (c *AddressDistanceCircuit) Define(api frontend.API) error {
+	// deltaLat = Lat2 - Lat1
+	deltaLat := api.Sub(c.Lat2, c.Lat1)
+	// deltaLon = Lon2 - Lon1
+	deltaLon := api.Sub(c.Lon2, c.Lon1)
 
-	// Compute delta lat/lon
-	dLat := api.Sub(c.Lat2, c.Lat1)
-	dLon := api.Sub(c.Lon2, c.Lon1)
+	// squared distance = deltaLat^2 + deltaLon^2
+	deltaLatSq := api.Mul(deltaLat, deltaLat)
+	deltaLonSq := api.Mul(deltaLon, deltaLon)
+	distSq := api.Add(deltaLatSq, deltaLonSq)
 
-	// Compute squared distance (fixed point)
-	dLat2 := api.Mul(dLat, dLat)
-	dLon2 := api.Mul(dLon, dLon)
+	// Define the threshold squared as a constant in the circuit
+	// For example, threshold = 1000 meters, scaled by 1,000,000 => threshold scaled = 1000 * 1,000,000 = 1e9
+	// But since we work on degrees * 1e6, you need to convert meters to degrees scaled by 1e6.
+	// For simplicity here, we use a threshold in scaled degrees squared.
+	// Let's say threshold = 0.01 degrees (approx ~1.11 km) scaled by 1e6 = 10,000
+	// thresholdSq = 10,000^2 = 100,000,000
 
-	sum := api.Add(dLat2, dLon2)
-	// Check that the provided distance squared matches sum approximately
-	distSquared := api.Mul(c.Distance, c.Distance)
-	// Allow some small error margin (epsilon)
-	epsilon := frontend.Variable(10) // adjust as needed
+	scaledDist := api.Mul(c.Distance, 1000000) // Scale distance by 1e6
+	thresholdSq := api.Mul(scaledDist, scaledDist)
 
-	// Enforce |distSquared - sum| <= epsilon
-	diff := api.Sub(distSquared, sum)
-	diffNeg := api.Neg(diff)
-
-	api.Println("Distance squared:", distSquared)
-	api.Println("Sum of squares:", sum)
-
-	api.AssertIsLessOrEqual(diff, epsilon)
-	api.AssertIsLessOrEqual(diffNeg, epsilon)
+	// Enforce distSq <= thresholdSq
+	api.AssertIsLessOrEqual(distSq, thresholdSq)
 
 	// Hash Lat using MiMC
 	hFunc1, err := mimcCircuit.NewMiMC(api)
@@ -115,20 +114,38 @@ func main() {
 		panic(err)
 	}
 
+	// Scaling factor (e.g. 6 decimal places)
+	scale := int64(1e6)
+	q := ecc.BN254.ScalarField()
+
 	// Input values
-	// Latitude and Longitude of the first address (private)
-	Lat1 := "38.7223" // Latitude of Lisbon, Portugal
-	Lon1 := "-9.1393" // Longitude of Lisbon, Portugal
-	// Latitude and Longitude of the second address (public)
-	Lat2 := "41.1496" // Latitude of Porto, Portugal
-	Lon2 := "-8.6109" // Longitude of Porto, Portugal
+	// Latitude and Longitude
+	lat1f, lon1f := 37.774900, -122.419400
+	lat2f, lon2f := 37.775000, -123.419500
+
+	// Convert to fixed-point signed integers
+	lat1 := int64(lat1f * float64(scale))
+	lon1 := int64(lon1f * float64(scale))
+	lat2 := int64(lat2f * float64(scale))
+	lon2 := int64(lon2f * float64(scale))
+
+	// Set distance (in kms)
+	Distance := int64(2)
+
+	// Scale lat/lon by 1e6
+	// Private inputs (Lat1, Lon1)
+	Lat1 := SignedInt64ToField(lat1, q)
+	Lon1 := SignedInt64ToField(lon1, q)
+	// Public inputs (Lat2, Lon2)
+	Lat2 := SignedInt64ToField(lat2, q)
+	Lon2 := SignedInt64ToField(lon2, q)
 	// Hash the Latitude using MiMC
 	hashFunc1 := mimcNative.NewMiMC() // native hash
-	hashFunc1.Write([]byte(Lat1))
+	hashFunc1.Write(Lat1.Bytes())
 	hashOfLat := hashFunc1.Sum(nil)
 	// Hash the Longitude using MiMC
 	hashFunc2 := mimcNative.NewMiMC() // native hash
-	hashFunc2.Write([]byte(Lon1))
+	hashFunc2.Write(Lon1.Bytes())
 	hashOfLon := hashFunc2.Sum(nil)
 
 	// Print variables
@@ -141,11 +158,11 @@ func main() {
 
 	// Create witness
 	assignment := AddressDistanceCircuit{
-		Lat1:     new(big.Int).SetBytes([]byte(Lat1)),
-		Lon1:     new(big.Int).SetBytes([]byte(Lon1)),
-		Lat2:     new(big.Int).SetBytes([]byte(Lat2)),
-		Lon2:     new(big.Int).SetBytes([]byte(Lon2)),
-		Distance: 100,
+		Lat1:     Lat1,
+		Lon1:     Lon1,
+		Lat2:     Lat2,
+		Lon2:     Lon2,
+		Distance: Distance,
 		HashLat:  new(big.Int).SetBytes(hashOfLat),
 		HashLon:  new(big.Int).SetBytes(hashOfLon),
 	}
