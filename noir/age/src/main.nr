@@ -61,8 +61,6 @@ fn calculate_age(dob: [u8; 10], today: [u8; 10]) -> u8 {
     age
 }
 
-
-
 fn main(dob: [u8; 10], today: pub [u8; 10], age: pub u8, hash: pub [u8; 32], salt: pub [u8; 16]) {
     // First step: prepend the salt to the date of birth
     let mut input: [u8; 26] = [0; 26];
