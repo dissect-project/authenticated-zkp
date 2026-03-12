@@ -1,0 +1,4 @@
+# Private string
+x = "42 Fictional Way, Smithfield, Dublin 7, D07 F4K3, Ireland"
+# Public string
+y = "Smithfield"

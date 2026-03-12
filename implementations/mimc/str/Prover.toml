@@ -1,0 +1,8 @@
+# Private string
+x = "42 Fictional Way, Smithfield, Dublin 7, D07 F4K3, Ireland"
+# Public string
+y = "Smithfield"
+# Hash of the private string
+hash = [2,1,242,137,182,162,21,91,58,135,145,131,211,253,41,177,162,144,225,132,123,99,66,136,30,165,212,42,48,198,65,17]
+# Salt for the hash
+salt = [110,35,223,147,182,54,91,117,189,6,75,96,206,24,207,176]
