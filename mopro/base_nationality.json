@@ -1,0 +1,49 @@
+{
+    "noir_version": "1.0.0-beta.7+24c053fba747770cf8d3f813d22cfa003714dfb6",
+    "hash": "5307121428957778105",
+    "abi": {
+        "parameters": [
+            {
+                "name": "list",
+                "type": {
+                    "kind": "array",
+                    "length": 5,
+                    "type": {
+                        "kind": "string",
+                        "length": 2
+                    }
+                },
+                "visibility": "private"
+            },
+            {
+                "name": "nationality",
+                "type": {
+                    "kind": "string",
+                    "length": 2
+                },
+                "visibility": "public"
+            }
+        ],
+        "return_type": null,
+        "error_types": {
+            "15512394517384629053": {
+                "error_kind": "string",
+                "string": "Nationality is not in the list."
+            }
+        }
+    },
+    "bytecode": "H4sIAAAAAAAA/9Wa3U7bQBCFx3ZC/golxYFQUn5KCqWk4I1tYktF4q7P0ajhrk/Sl+hb9XXIil0xcvYuZ6TdkSJH4+TwzYlnPSQb0Wuo9ePRPI/Wj8QcdXQbuciRix25xJFrOXJtR27Hkes4cl1HrufI9R25gcnxSMzxyRyz7UJxrTx7KIrVYr5SufqVzetlVWZFuXyoVKXKqvw9r/J8VRXVol7Wi6xWRb5Sz2WdPxuxPlDrHa7GrEVv100zIrCfSG7OuysJvCuguwe8GKTq3mMGg3QzJglv1gjo6QCo9Z7CbFYkN+fdlwTeF9Adkt/NquseMoNBuqLNGpOfd9YPFGazIrk574Ek8IGAbkp+N6uuO2UGg3RFmzUhP++sIwqzWZHcnPdQEvhQQPeI/G5WXfcRMxik62Tdtv7UsKJ1x0A/JT4j/W/KUKDuYwpjcW6Rn5PURwpzcUZyc94TSeATAd0J+b0467onzGCQrmiztsnPSeoThdmsSG7OeyoJfCqge0Z+N6uu+4wZDNIVmaQmhhWte07YSSoGf0Z2gkTp6cnxWMDHCwpjsd8hPyezzxTmYo/k5ryXksCXArpT8nux13VPmcEgXdFm7ZCfk9kXCrNZkdyc90oS+EpA95r8blZd9zUzGKQrMplNDSta9yv5PZnZiRSld77WuBDw8YbCWOy75Odk9o3CXOyR3Jz3VhL4VkB3Rn4v9rruGTMYpCvarD3yczL7TmE2K5Kb895JAt8J6N6T382q675nBoN0RSazmWFF62bk92RmJ1KUnp5EbwR8VODrB+2jvX5QehpS0WbvbOuj3QWvo8/07S76xJzXP/To7//srvce80y/b9B4r40f5vj498/43/jn/+Zreo3jiJ1PCHvT1ZHK6Gcd2owRe5426ozZuScQg9WzA0ubNiNunLOv7Tb4IjyfarIkjr9lw+7T41vLrJ8vIOL7HSYyAAA=",
+    "debug_symbols": "pdTdisIwEAXgd8l1L2xmpj++yrJIrHEJhLTEVljEd9+xx7p6sbDUq2M7OZ+kLbmYg99PX7uQjv3JbD8uZp9DjOFrF/vOjaFPevdyLcxyuRuz93rLPM21Nbjs02i2aYqxMGcXp3nRaXBpztFlnW4K49NBU8FjiP7261r8tjd/V7lt72Wx/KjLv/tS2aXf1Cv6XPO9z035Xr+Vt/or90/10pfmvf7K50eP/pr/r3jZf8XtS/9Tr1wX8ssXa0qr08KUhGCEICqz1d2UNaJBtHPYzbzElggoFoplLBEEFAvFqtJotHMQFIJCUAgKQSEoBIWgEBSCwlAYCkNhKAyFoTAUhsJQGIpAESgCRaAIFIEiUASKQBEolSq35352Obh99Pdj4Til7umUGL+HZbKcI0PuO3+Ysr+9n3mmb+wH",
+    "file_map": {
+        "50": {
+            "source": "global Nationalities: u32 = 5; // Maximum number of allowed nationalities\n\nfn main(list: [str<2>; Nationalities], nationality: pub str<2>) {\n    // First step: prepend the salt to the date of birth (skip)\n    // Second step: calculate the hash of the list (skip)\n    // Third step: check wether the provided hash matches the one calculated (skip)\n    // Fourth step: check if nationality is in the list\n    let mut found = false;\n    for i in 0..Nationalities {\n        if (list[i].as_bytes()[0] == nationality.as_bytes()[0]) &\n        (list[i].as_bytes()[1] == nationality.as_bytes()[1]) {\n            found = true;\n        }\n    }\n    assert(found, \"Nationality is not in the list.\");\n}\n\n#[test]\nfn test_main() {\n    // Test that passes both hash and age verification\n    main([\"PT\", \"EN\", \"--\", \"--\", \"--\"], \"PT\");\n    // Test that fails in nationality verification\n    //main([\"PT\", \"EN\", \"--\", \"--\", \"--\"], \"ES\");\n    // Test that fails in hash verification\n    //main([\"PT\", \"EN\", \"--\", \"--\", \"--\"], \"PT\");\n\n}",
+            "path": "/Users/ribeiro/Repositories/DISSECT/verifiable-zkp/implementations/base/nationality/src/main.nr"
+        }
+    },
+    "names": [
+        "main"
+    ],
+    "brillig_names": [
+        "directive_invert"
+    ]
+}

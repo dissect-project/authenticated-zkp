@@ -1,26 +1,14 @@
 #!/bin/bash
 
-# Check for exactly two input arguments
-if [ $# -ne 2 ]; then
-  echo "Usage: $0 STRING1 STRING2"
-  exit 1
-fi
-
-STRING1="$1"
-STRING2="$2"
-
-# Convert both strings to hex
-str1_hex=$(echo -n "$STRING1" | xxd -p -c 256)
-str2_hex=$(echo -n "$STRING2" | xxd -p -c 256)
-
 # Generate 16-byte (128-bit) random salt
-salt_hex=$(openssl rand -hex 16)
+salt_hex="09c257951b514803e849365a606dac94"
 
-# Concatenate salt + string1 hex (can change this logic as needed)
-combined_hex="${salt_hex}${str1_hex}"
-
-# Hash the binary data
-hash_hex=$(echo -n "$combined_hex" | xxd -r -p | sha256sum | awk '{print $1}')
+# ----------------- MODIFIED SECTION -----------------
+# Hashed value is hardcoded due to Noir's underlying prover backend (Barretenberg),
+# which uses a different MiMC implementation (with different parameters) than the
+# ones find for example in circomlibjs
+hash_u8_array="[10,236,72,23,208,29,117,151,54,159,253,217,114,216,239,178,216,171,46,83,14,98,166,21,6,2,67,231,233,37,194,139]"
+# ----------------------------------------------------
 
 # Function: Convert hex string to ASCII decimal u8 array
 hex_to_ascii_u8_array() {
@@ -43,4 +31,4 @@ echo "Input STRING2: $STRING2"
 echo "STRING2 (ASCII u8 array): $(hex_to_ascii_u8_array "$str2_hex")"
 echo ""
 echo "Salt (u8 array): $(hex_to_ascii_u8_array "$salt_hex")"
-echo "Hash (u8 array): $(hex_to_ascii_u8_array "$hash_hex")"
+echo "Hash (u8 array): $hash_u8_array"

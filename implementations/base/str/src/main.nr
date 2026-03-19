@@ -1,4 +1,3 @@
-
 global STRSIZE: u32 = 57;
 global SUBSTRSIZE: u32 = 10;
 
@@ -31,13 +30,15 @@ fn main(x: str<STRSIZE>, y: pub str<SUBSTRSIZE>) {
     // Third step: check wether the provided hash matches the one calculated (skip)
     // Fourth step: check if x contains y
     assert(contains(x, y), "Substring verification has failed.");
-    
 }
 
 #[test]
 fn test_main() {
     // Test that passes both hash and string verification
-    main("42 Fictional Way, Smithfield, Dublin 7, D07 F4K3, Ireland", "Smithfield");
+    main(
+        "42 Fictional Way, Smithfield, Dublin 7, D07 F4K3, Ireland",
+        "Smithfield",
+    );
     // Test that fails in string verification
     //main("one two three four", "yes");
     // Test that fails in hash verification
