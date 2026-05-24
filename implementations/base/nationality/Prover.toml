@@ -1,4 +1,5 @@
 # nationality list = [PT,EN]
-list = ["PT","EN","--","--","--"]
-# dob = EN
+list = ["PT", "EN", "--", "--", "--"]
+# nationality = EN
+nationalityp = "EN"
 nationality = "EN"

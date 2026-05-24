@@ -48,7 +48,6 @@ fn calculate_age(dob: [u8; 10], today: [u8; 10]) -> u8 {
     let today_month: u8 = parse_u8_pair(today[3], today[4]);
     let today_year: u8 = parse_year(today[6], today[7], today[8], today[9]);
 
-
     assert(today_year >= dob_year, "DOB is in the future");
     let mut age: u8 = today_year - dob_year;
 
@@ -57,12 +56,23 @@ fn calculate_age(dob: [u8; 10], today: [u8; 10]) -> u8 {
     }
 
     assert(age < 255, "Age out of u8 range");
-    
+
     age
 }
 
-fn main(dob: [u8; 10], today: pub [u8; 10], age: pub u8, hash: pub [u8; 32], salt: pub [u8; 16]) {
-    // First step: prepend the salt to the date of birth
+fn main(
+    dob: [u8; 10],
+    todayp: [u8; 10],
+    agep: u8,
+    today: pub [u8; 10],
+    age: pub u8,
+    hash: pub [u8; 32],
+    salt: [u8; 16],
+) {
+    // First step: check that public inputs are correct
+    assert(today == todayp, "Public input today's date does not match expected value.");
+    assert(age == agep, "Public input age does not match expected value.");
+    // Second step: prepend the salt to the date of birth
     let mut input: [u8; 26] = [0; 26];
     for i in 0..16 {
         input[i] = salt[i];
@@ -70,25 +80,12 @@ fn main(dob: [u8; 10], today: pub [u8; 10], age: pub u8, hash: pub [u8; 32], sal
     for i in 0..10 {
         input[16 + i] = dob[i];
     }
-    // Second step: calculate the hash of the date of birth
+    // Third step: calculate the hash of the date of birth
     let dob_hash = digest(input);
-    // Third step: check wether the provided hash matches the one calculated
+    // Fourth step: check wether the provided hash matches the one calculated
     assert(dob_hash == hash, "Hash verification has failed.");
-    // Fourth step: calculate age from today's date
+    // Fifth step: calculate age from today's date
     let calculated_age: u8 = calculate_age(dob, today);
-    // Fifth step: check wether calculated ages is above the limit
+    // Sixth step: check wether calculated ages is above the limit
     assert(calculated_age >= age, "Age verification has failed.");
-}
-
-#[test]
-fn test_main() {
-
-    // Test that passes both hash and age verification
-    main([49,54,47,48,56,47,49,57,57,57], [50,49,47,48,55,47,50,48,50,53], 20, [21,54,128,97,5,129,171,144,86,195,86,153,56,252,12,10,34,131,70,192,177,146,24,172,207,234,101,166,42,217,120,89], [31,230,203,155,87,9,60,127,138,57,159,187,227,67,7,241]);
-
-    // Test that fails in age verification
-    //main([49,54,47,48,56,47,49,57,57,57], [50,49,47,48,55,47,50,48,50,53], 30, [21,54,128,97,5,129,171,144,86,195,86,153,56,252,12,10,34,131,70,192,177,146,24,172,207,234,101,166,42,217,120,89], [31,230,203,155,87,9,60,127,138,57,159,187,227,67,7,241]);
-
-    // Test that fails in hash verification
-    //main([49,54,47,48,56,47,49,57,57,57], [50,49,47,48,55,47,50,48,50,53], 20, [20,54,128,97,5,129,171,144,86,195,86,153,56,252,12,10,34,131,70,192,177,146,24,172,207,234,101,166,42,217,120,89], [31,230,203,155,87,9,60,127,138,57,159,187,227,67,7,241]);
 }

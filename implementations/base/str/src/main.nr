@@ -24,23 +24,19 @@ fn contains(string: str<STRSIZE>, substring: str<SUBSTRSIZE>) -> bool {
     found
 }
 
-fn main(x: str<STRSIZE>, y: pub str<SUBSTRSIZE>) {
-    // First step: prepend the salt to the date of birth (skip)
-    // Second step: calculate the hash of the number (skip)
-    // Third step: check wether the provided hash matches the one calculated (skip)
-    // Fourth step: check if x contains y
+fn main(x: str<STRSIZE>, yp: pub str<SUBSTRSIZE>, y: pub str<SUBSTRSIZE>) {
+    // First step: check that public inputs are correct
+    assert(y == yp, "Public input y does not match expected value.");
+    // Second step: check if x contains y
     assert(contains(x, y), "Substring verification has failed.");
 }
 
 #[test]
 fn test_main() {
-    // Test that passes both hash and string verification
+    // Test that it passes substring verification
     main(
         "42 Fictional Way, Smithfield, Dublin 7, D07 F4K3, Ireland",
         "Smithfield",
+        "Smithfield",
     );
-    // Test that fails in string verification
-    //main("one two three four", "yes");
-    // Test that fails in hash verification
-    //main("one two three four", "two");
 }

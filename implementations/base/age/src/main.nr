@@ -1,4 +1,3 @@
-
 fn parse_u8_pair(b1: u8, b2: u8) -> u8 {
     let b1_field: Field = b1.into();
     let b2_field: Field = b2.into();
@@ -47,7 +46,6 @@ fn calculate_age(dob: [u8; 10], today: [u8; 10]) -> u8 {
     let today_month: u8 = parse_u8_pair(today[3], today[4]);
     let today_year: u8 = parse_year(today[6], today[7], today[8], today[9]);
 
-
     assert(today_year >= dob_year, "DOB is in the future");
     let mut age: u8 = today_year - dob_year;
 
@@ -56,29 +54,28 @@ fn calculate_age(dob: [u8; 10], today: [u8; 10]) -> u8 {
     }
 
     assert(age < 255, "Age out of u8 range");
-    
+
     age
 }
 
-fn main(dob: [u8; 10], today: pub [u8; 10], age: pub u8) {
-    // First step: prepend the salt to the date of birth (skip)
-    // Second step: calculate the hash of the date of birth (skip)
-    // Third step: check wether the provided hash matches the one calculated (skip)
-    // Fourth step: calculate age from today's date
+fn main(dob: [u8; 10], todayp: [u8; 10], agep: u8, today: pub [u8; 10], age: pub u8) {
+    // First step: check that public inputs are correct
+    assert(today == todayp, "Today's date does not match expected input.");
+    assert(age == agep, "Age does not match expected input.");
+    // Second step: calculate age from today's date
     let calculated_age: u8 = calculate_age(dob, today);
-    // Fifth step: check wether calculated ages is above the limit
+    // Third step: check wether calculated ages is above the limit
     assert(calculated_age >= age, "Age verification has failed.");
 }
 
 #[test]
 fn test_main() {
-
-    // Test that passes both hash and age verification
-    main([49,54,47,48,56,47,49,57,57,57], [50,49,47,48,55,47,50,48,50,53], 20);
-
-    // Test that fails in age verification
-    //main([49,54,47,48,56,47,49,57,57,57], [50,49,47,48,55,47,50,48,50,53], 30);
-
-    // Test that fails in hash verification
-    //main([49,54,47,48,56,47,49,57,57,57], [50,49,47,48,55,47,50,48,50,53], 20);
+    // Test that it passes age verification
+    main(
+        [49, 54, 47, 48, 56, 47, 49, 57, 57, 57],
+        [50, 49, 47, 48, 55, 47, 50, 48, 50, 53],
+        20,
+        [50, 49, 47, 48, 55, 47, 50, 48, 50, 53],
+        20,
+    );
 }

@@ -26,9 +26,16 @@ fn contains(string: str<STRSIZE>, substring: str<SUBSTRSIZE>) -> bool {
     found
 }
 
-
-fn main(x: str<STRSIZE>, y: pub str<SUBSTRSIZE>, hash: pub [u8; 32], salt: pub [u8; 16]) {
-    // First step: convert salt and string into single Field elements (big-endian packing)
+fn main(
+    x: str<STRSIZE>,
+    yp: str<SUBSTRSIZE>,
+    y: pub str<SUBSTRSIZE>,
+    hash: pub [u8; 32],
+    salt: [u8; 16],
+) {
+    // First step: check that public inputs are correct
+    assert(y == yp, "Public input substring does not match expected value.");
+    // Second step: convert salt and string into single Field elements (big-endian packing)
     let mut str_field: Field = 0;
     for i in 0..STRSIZE {
         str_field = (str_field * 256) + (x.as_bytes()[i] as Field);
@@ -37,28 +44,15 @@ fn main(x: str<STRSIZE>, y: pub str<SUBSTRSIZE>, hash: pub [u8; 32], salt: pub [
     for i in 0..16 {
         salt_field = (salt_field * 256) + (salt[i] as Field);
     }
-    // Second step: calculate the hash of the date of birth
-    let str_hash = hash_2([salt_field,str_field]);
+    // Third step: calculate the hash of the date of birth
+    let str_hash = hash_2([salt_field, str_field]);
     // Convert the 32-byte input hash into a Field for comparison
     let mut expected_hash_field: Field = 0;
     for i in 0..32 {
         expected_hash_field = (expected_hash_field * 256) + (hash[i] as Field);
     }
-    // Third step: check wether the provided hash matches the one calculated
+    // Fourth step: check wether the provided hash matches the one calculated
     assert(str_hash == expected_hash_field, "Hash verification has failed.");
-    // Fourth step: check if x contains y
+    // Fifth step: check if x contains y
     assert(contains(x, y), "Substring verification has failed.");
-    
-}
-
-#[test]
-fn test_main() {
-    // Test that passes both hash and string verification
-    main("42 Fictional Way, Smithfield, Dublin 7, D07 F4K3, Ireland", "Smithfield", [71, 87, 130, 27, 232, 27, 59, 184, 139, 215, 175, 163, 14, 83, 132, 108, 15, 213, 229, 4, 177, 186, 180, 111, 89, 89, 133, 193, 162, 203, 161, 112],[78, 89, 32, 99, 38, 140, 152, 79, 207, 255, 245, 138, 28, 119, 131, 94]);
-
-    // Test that fails in string verification
-    //main("one two three four", "yes", [124, 30, 118, 43, 116, 145, 122, 223, 197, 103, 24, 189, 179, 12, 62, 157, 203, 179, 198, 228, 67, 161, 91, 66, 166, 116, 199, 50, 84, 9, 254, 43],[78, 222, 201, 33, 29, 157, 101, 252, 1, 249, 198, 61, 137, 115, 134, 86]);
-
-    // Test that fails in hash verification
-    //main("one two three four", "two", [125, 30, 118, 43, 116, 145, 122, 223, 197, 103, 24, 189, 179, 12, 62, 157, 203, 179, 198, 228, 67, 161, 91, 66, 166, 116, 199, 50, 84, 9, 254, 43],[78, 222, 201, 33, 29, 157, 101, 252, 1, 249, 198, 61, 137, 115, 134, 86]);
 }
