@@ -13,8 +13,8 @@ Five variations are implemented, differing in the hash function used to bind the
 | `sha512` | SHA-512 | Supported by the ISO/IEC 18013-5 mDoc standard |
 | `mimc` | MiMC BN254 | ZKP-friendly hash function; low circuit complexity |
 | `poseidon` | Poseidon | ZKP-friendly hash function; widely used in ZK protocols |
-| `sha256-iso`, `sha512-iso`, `poseidon-iso`, `base-iso` | as above | ISO/IEC 18013-5 inputs: the commitment is the MSO digest of `IssuerSignedItemBytes` (digestID, random, elementIdentifier, elementValue) and values use their ISO encoding; `poseidon-iso` is for comparison only, as ISO 18013-5 allows only SHA-2. `int`, `age`, `nationality` and `str` scenarios, see `implementations/iso/README.md` |
-| `longfellow` | SHA-256 + in-circuit ECDSA P-256 | Noir port of the Longfellow-zk mdoc circuit (issuer and device signatures verified in-circuit); `int`, `age`, `nationality` and `str` scenarios, see `implementations/longfellow/README.md` |
+| `sha256-iso`, `sha512-iso`, `poseidon-iso`, `base-iso` | as above | ISO/IEC 18013-5 inputs: the commitment is the MSO digest of `IssuerSignedItemBytes` (digestID, random, elementIdentifier, elementValue) and values use their ISO encoding; `poseidon-iso` is for comparison only, as ISO 18013-5 allows only SHA-2. `int`, `age`, `nationality` and `str` scenarios. |
+| `longfellow` | SHA-256 + in-circuit ECDSA P-256 | Noir port of the Longfellow-zk mdoc circuit (issuer and device signatures verified in-circuit); `int`, `age`, `nationality` and `str` scenarios. |
 
 Each variation includes three **scenarios**. The primary scenario emulates identity-related attribute proofs:
 
@@ -37,44 +37,52 @@ Each variation includes three **scenarios**. The primary scenario emulates ident
 
 ```
 authenticated-zkp/
+├── docs/
+│   └── testing-app.png       # Screenshot of the testing application
 ├── implementations/
-│   ├── base/               # No hash authentication
-│   │   ├── age/
-│   │   ├── int/
-│   │   ├── nationality/
-│   │   └── str/
-│   ├── sha256/             # SHA-256 hash version
-│   │   ├── age/
-│   │   ├── int/
-│   │   ├── nationality/
-│   │   └── str/
-│   ├── sha512/             # SHA-512 hash version
-│   │   ├── age/
-│   │   ├── int/
-│   │   ├── nationality/
-│   │   └── str/
-│   └── poseidon/           # Poseidon hash version
-│       ├── age/
-│       ├── int/
-│       ├── nationality/
-│       └── str/
+│   ├── base/                 # No hash authentication
+│   ├── sha256/               # SHA-256 hash version
+│   ├── sha512/               # SHA-512 hash version
+│   ├── poseidon/             # Poseidon hash version
+│   │   └── age/  int/  nationality/  str/  varstr/
+│   │
+│   ├── base-iso/             # ISO/IEC 18013-5 inputs (CBOR), no hash authentication
+│   ├── sha256-iso/           # ISO/IEC 18013-5: SHA-256 MSO digest of IssuerSignedItemBytes
+│   ├── sha512-iso/           # ISO/IEC 18013-5: SHA-512 MSO digest of IssuerSignedItemBytes
+│   ├── poseidon-iso/         # Same item hashed with Poseidon (comparison only, not ISO)
+│   │   └── age/  int/  nationality/  str/
+│   ├── iso/                  # Shared code of the -iso variants (see iso/README.md)
+│   │   ├── lib/              # Noir library: CBOR decoding, IssuerSignedItemBytes, SHA-256
+│   │   ├── sha512/           # Noir library: SHA-512 of the item
+│   │   ├── poseidon/         # Noir library: Poseidon of the item
+│   │   ├── hasher/           # Noir program computing the Poseidon digest for generate.py
+│   │   └── generate.py       # Builds (or reads) an item and writes Prover.toml / Dart inputs
+│   │
+│   └── longfellow/           # Noir port of the Longfellow-zk mdoc circuit (see longfellow/README.md)
+│       ├── lib/              # Noir library: in-circuit MSO, signature and device checks
+│       ├── age/  int/  nationality/  str/
+│       ├── generate.py       # Builds a signed credential and writes Prover.toml / Dart inputs
+│       └── test_soundness.py # Attacks the circuit must reject
 │
 │   Each scenario directory contains:
-│       ├── src/main.nr     # Noir circuit
-│       ├── Nargo.toml      # Noir package manifest
-│       ├── Prover.toml     # Proof inputs
-│       ├── bytes.sh        # Helper script to compute inputs and hash
-│       └── target/         # Compiled artifacts and proofs
+│       ├── src/main.nr       # Noir circuit
+│       ├── Nargo.toml        # Noir package manifest
+│       ├── Prover.toml       # Proof inputs
+│       ├── bytes.sh          # Helper script to compute inputs and hash (original variants)
+│       ├── inputs_*.dart     # Inputs of the four test runs (-iso and longfellow variants)
+│       └── target/           # Compiled artifacts and proofs
 │
 └── tests/
-    ├── 150/                # Content for the varstr-150 test
-    ├── primary/            # Content for the primary test
-    ├── varstr/             # Content for the varstr test
-    └── testing-app.apk     # Android application to run the tests
+    ├── 150/                  # Content for the varstr-150 test
+    ├── primary/              # Content for the primary test
+    ├── varstr/               # Content for the varstr test
+    ├── comparison.py         # Benchmarks gates and proving times of every variant
+    ├── comparison-results.txt  # Output of comparison.py
+    └── testing-app.apk       # Android application to run the tests
 
-    Each scenario directory contains:
-        ├── circuits/       # Circuits used
-        └── inputs/         # Inputs used
+    Each test directory contains:
+        ├── circuits/         # Circuits used
+        └── inputs/           # Inputs used
 ```
 
 ---
