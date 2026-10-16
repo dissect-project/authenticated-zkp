@@ -1,0 +1,3 @@
+list_cbor = [130, 98, 80, 84, 98, 69, 78, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+nationalityp_cbor = [98, 69, 78]
+nationality_cbor = [98, 69, 78]

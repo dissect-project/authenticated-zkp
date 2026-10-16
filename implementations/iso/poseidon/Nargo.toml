@@ -1,0 +1,8 @@
+[package]
+name = "iso_poseidon"
+type = "lib"
+authors = [""]
+
+[dependencies]
+iso = { path = "../lib" }
+poseidon = { tag = "v0.1.1", git = "https://github.com/noir-lang/poseidon" }

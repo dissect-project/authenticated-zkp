@@ -1,0 +1,8 @@
+[package]
+name = "iso_sha512"
+type = "lib"
+authors = [""]
+
+[dependencies]
+iso = { path = "../lib" }
+sha512 = { tag = "master", git = "https://github.com/noir-lang/sha512" }

@@ -1,0 +1,7 @@
+[package]
+name = "hasher"
+type = "bin"
+authors = [""]
+
+[dependencies]
+iso_poseidon = { path = "../poseidon" }

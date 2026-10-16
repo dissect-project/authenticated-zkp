@@ -1,0 +1,7 @@
+[package]
+name = "str"
+type = "bin"
+authors = [""]
+
+[dependencies]
+iso = { path = "../../iso/lib" }

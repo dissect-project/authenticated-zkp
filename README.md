@@ -13,6 +13,8 @@ Five variations are implemented, differing in the hash function used to bind the
 | `sha512` | SHA-512 | Supported by the ISO/IEC 18013-5 mDoc standard |
 | `mimc` | MiMC BN254 | ZKP-friendly hash function; low circuit complexity |
 | `poseidon` | Poseidon | ZKP-friendly hash function; widely used in ZK protocols |
+| `sha256-iso`, `sha512-iso`, `poseidon-iso`, `base-iso` | as above | ISO/IEC 18013-5 inputs: the commitment is the MSO digest of `IssuerSignedItemBytes` (digestID, random, elementIdentifier, elementValue) and values use their ISO encoding; `poseidon-iso` is for comparison only, as ISO 18013-5 allows only SHA-2. `int`, `age`, `nationality` and `str` scenarios, see `implementations/iso/README.md` |
+| `longfellow` | SHA-256 + in-circuit ECDSA P-256 | Noir port of the Longfellow-zk mdoc circuit (issuer and device signatures verified in-circuit); `int`, `age`, `nationality` and `str` scenarios, see `implementations/longfellow/README.md` |
 
 Each variation includes three **scenarios**. The primary scenario emulates identity-related attribute proofs:
 

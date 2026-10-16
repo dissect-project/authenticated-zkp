@@ -1,0 +1,8 @@
+[package]
+name = "age"
+type = "bin"
+authors = [""]
+
+[dependencies]
+iso = { path = "../../iso/lib" }
+iso_sha512 = { path = "../../iso/sha512" }

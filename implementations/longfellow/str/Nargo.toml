@@ -1,0 +1,8 @@
+[package]
+name = "str"
+type = "bin"
+authors = [""]
+
+[dependencies]
+longfellow = { path = "../lib" }
+iso = { path = "../../iso/lib" }
