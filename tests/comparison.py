@@ -2,9 +2,10 @@
 """Compares the circuit variants and their ISO/IEC 18013-5 versions on this machine.
 
 The variants are sha256, sha512, poseidon and base, each next to its -iso version (the hash
-commitment is the MSO digest of IssuerSignedItemBytes), and longfellow. Each -iso version is
-compared with its counterpart, and longfellow with the ISO-compliant versions (sha256-iso and
-sha512-iso). For each circuit it reports the number of gates (bb gates) and the average time
+commitment is the MSO digest of IssuerSignedItemBytes), longfellow and vega. Each -iso version is
+compared with its counterpart, longfellow with the ISO-compliant versions (sha256-iso and
+sha512-iso), and vega with longfellow (same credentials) and sha256-iso. For each circuit it
+reports the number of gates (bb gates) and the average time
 to generate the witness (nargo execute), the proof (bb prove) and to verify it
 (bb verify). The circuits are copied to a temporary directory, so the target/
 folders in the repository are left untouched.
@@ -28,12 +29,13 @@ ROOT = Path(__file__).resolve().parent.parent
 IMPLEMENTATIONS = ROOT / "implementations"
 SCENARIOS = ["int", "age", "nationality", "str"]
 VARIANTS = ["sha256", "sha256-iso", "sha512", "sha512-iso", "poseidon", "poseidon-iso",
-            "base", "base-iso", "longfellow"]
+            "base", "base-iso", "longfellow", "vega"]
 # Comparison tables printed at the end, as (variant, reference) pairs. poseidon-iso uses a digest
 # algorithm that ISO 18013-5 does not allow and base-iso has no digest, so longfellow is compared
 # only with the ISO-compliant versions.
 ISO_PAIRS = [(f"{v}-iso", v) for v in ["sha256", "sha512", "poseidon", "base"]]
 LONGFELLOW_PAIRS = [("longfellow", "sha256-iso"), ("longfellow", "sha512-iso")]
+VEGA_PAIRS = [("vega", "longfellow"), ("vega", "sha256-iso")]
 
 
 def run(cmd, cwd):
@@ -164,6 +166,7 @@ def main():
     comparison_table("ISO 18013-5 versions vs their counterparts", ISO_PAIRS, results, scenarios, variants)
     comparison_table("Longfellow vs the ISO-compliant versions", LONGFELLOW_PAIRS, results, scenarios,
                      variants)
+    comparison_table("VegaSC vs Longfellow and sha256-iso", VEGA_PAIRS, results, scenarios, variants)
 
 
 if __name__ == "__main__":

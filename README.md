@@ -15,6 +15,7 @@ Five variations are implemented, differing in the hash function used to bind the
 | `poseidon` | Poseidon | ZKP-friendly hash function; widely used in ZK protocols |
 | `sha256-iso`, `sha512-iso`, `poseidon-iso`, `base-iso` | as above | ISO/IEC 18013-5 inputs: the commitment is the MSO digest of `IssuerSignedItemBytes` (digestID, random, elementIdentifier, elementValue) and values use their ISO encoding; `poseidon-iso` is for comparison only, as ISO 18013-5 allows only SHA-2. `int`, `age`, `nationality` and `str` scenarios. |
 | `longfellow` | SHA-256 + in-circuit ECDSA P-256 | Noir port of the Longfellow-zk mdoc circuit (issuer and device signatures verified in-circuit); `int`, `age`, `nationality` and `str` scenarios. |
+| `vega` | SHA-256 + in-circuit ECDSA P-256 | Noir port of the VegaSC mdoc circuit (Figure 9a of the Vega paper: length-hiding SHA-256, lookup-based field extraction without CBOR parsing, issuer and device signatures in-circuit), run on the same credentials as `longfellow`; `int`, `age`, `nationality` and `str` scenarios. |
 
 Each variation includes three **scenarios**. The primary scenario emulates identity-related attribute proofs:
 
@@ -58,18 +59,24 @@ authenticated-zkp/
 │   │   ├── hasher/           # Noir program computing the Poseidon digest for generate.py
 │   │   └── generate.py       # Builds (or reads) an item and writes Prover.toml / Dart inputs
 │   │
-│   └── longfellow/           # Noir port of the Longfellow-zk mdoc circuit (see longfellow/README.md)
-│       ├── lib/              # Noir library: in-circuit MSO, signature and device checks
+│   ├── longfellow/           # Noir port of the Longfellow-zk mdoc circuit (see longfellow/README.md)
+│   │   ├── lib/              # Noir library: in-circuit MSO, signature and device checks
+│   │   ├── age/  int/  nationality/  str/
+│   │   ├── generate.py       # Builds a signed credential and writes Prover.toml / Dart inputs
+│   │   └── test_soundness.py # Attacks the circuit must reject
+│   │
+│   └── vega/                 # Noir port of the VegaSC mdoc circuit (see vega/README.md)
+│       ├── lib/              # Noir library: length-hiding SHA-256, lookup field extraction, signatures
 │       ├── age/  int/  nationality/  str/
-│       ├── generate.py       # Builds a signed credential and writes Prover.toml / Dart inputs
-│       └── test_soundness.py # Attacks the circuit must reject
+│       ├── generate.py       # Converts the longfellow inputs (same credentials) to Prover.toml / Dart inputs
+│       └── test_soundness.py # Attacks the circuit must reject, and Vega's parsing assumption
 │
 │   Each scenario directory contains:
 │       ├── src/main.nr       # Noir circuit
 │       ├── Nargo.toml        # Noir package manifest
 │       ├── Prover.toml       # Proof inputs
 │       ├── bytes.sh          # Helper script to compute inputs and hash (original variants)
-│       ├── inputs_*.dart     # Inputs of the four test runs (-iso and longfellow variants)
+│       ├── inputs_*.dart     # Inputs of the four test runs (-iso, longfellow and vega variants)
 │       └── target/           # Compiled artifacts and proofs
 │
 └── tests/

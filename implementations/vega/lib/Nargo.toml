@@ -1,0 +1,7 @@
+[package]
+name = "vega"
+type = "lib"
+authors = [""]
+
+[dependencies]
+iso = { path = "../../iso/lib" }
