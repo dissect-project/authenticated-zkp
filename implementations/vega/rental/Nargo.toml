@@ -1,0 +1,8 @@
+[package]
+name = "rental"
+type = "bin"
+authors = [""]
+
+[dependencies]
+vega = { path = "../lib" }
+iso = { path = "../../iso/common/lib" }

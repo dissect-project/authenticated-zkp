@@ -1,0 +1,7 @@
+[package]
+name = "veteran"
+type = "bin"
+authors = [""]
+
+[dependencies]
+iso = { path = "../../iso/common/lib" }

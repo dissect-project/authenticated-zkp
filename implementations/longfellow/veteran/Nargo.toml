@@ -1,0 +1,8 @@
+[package]
+name = "veteran"
+type = "bin"
+authors = [""]
+
+[dependencies]
+longfellow = { path = "../lib" }
+iso = { path = "../../iso/common/lib" }

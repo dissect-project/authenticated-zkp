@@ -1,7 +1,0 @@
-[package]
-name = "nationality"
-type = "bin"
-authors = [""]
-
-[dependencies]
-iso = { path = "../../common/lib" }

@@ -1,30 +1,32 @@
 use std::hash::sha256_compression;
 
+pub mod cbor;
+pub mod predicates;
+
 // ISO/IEC 18013-5 (9.1.2.4): the MSO digest of a data element is
 //   h = H(IssuerSignedItemBytes), IssuerSignedItemBytes = #6.24(bstr .cbor IssuerSignedItem)
 //   IssuerSignedItem = { "digestID": uint, "random": bstr, "elementIdentifier": tstr, "elementValue": any }
-// encoded with the keys in this order, as in the examples of Annex D. The standard allows
-// H = SHA-256, SHA-384 or SHA-512; poseidon_item_digest applies Poseidon to the same bytes for
-// comparison (in ../poseidon), which no ISO issuer produces; SHA-512 is in ../sha512.
-//
-// The circuits receive each field already CBOR-encoded, as it appears in the issuer's item
-// (digestID, random and elementValue), and the library checks that each field is exactly one
-// CBOR data item of the expected type. That makes the split of the item into fields unique, so
-// a prover cannot move bytes from one field to another while keeping the same hash.
-pub global RANDOM_LEN: u32 = 16; // the minimum allowed by the standard
-// bstr head of random: 0x40 + length below 24 bytes, 58 LL from 24 to 255 bytes
-global RANDOM_HEAD_LEN: u32 = if RANDOM_LEN < 24 { 1 } else { 2 };
-// random as a CBOR bstr: head and bytes
-pub global RANDOM_CBOR_LEN: u32 = RANDOM_HEAD_LEN + RANDOM_LEN;
+// The standard fixes neither the order of the four entries nor the length of random beyond a
+// 16-byte minimum, and h is over the bytes exactly as the issuer encoded them. The circuits
+// therefore receive IssuerSignedItemBytes as issued and parse it (parse_item): the four entries in
+// any order, a random of MIN_RANDOM_LEN to MAX_RANDOM_LEN bytes, and items of up to 65535 bytes.
+// The standard allows H = SHA-256, SHA-384 or SHA-512; SHA-512 is in ../sha512, and
+// ../poseidon applies Poseidon to the same bytes for comparison, which no ISO issuer produces.
 
-// D8 18 58 LL A4 68 "digestID"
-pub global HEAD_LEN: u32 = 14;
 // A CBOR uint (digestID or an integer elementValue) takes at most 9 bytes
 pub global MAX_UINT_LEN: u32 = 9;
-// 66 "random" <random as CBOR> 71 "elementIdentifier"
-pub global RANDOM_PART_LEN: u32 = 7 + RANDOM_CBOR_LEN + 18;
-// 6C "elementValue"
-pub global VALUE_KEY_LEN: u32 = 13;
+pub global MIN_RANDOM_LEN: u32 = 16; // the minimum allowed by the standard
+pub global MAX_RANDOM_LEN: u32 = 32;
+
+// The four keys of IssuerSignedItem as CBOR text strings, each with a distinct first byte
+global KEY_DIGEST_ID: [u8; 9] = [0x68, 0x64, 0x69, 0x67, 0x65, 0x73, 0x74, 0x49, 0x44];
+global KEY_RANDOM: [u8; 7] = [0x66, 0x72, 0x61, 0x6e, 0x64, 0x6f, 0x6d];
+global KEY_ELEMENT_ID: [u8; 18] = [
+    0x71, 0x65, 0x6c, 0x65, 0x6d, 0x65, 0x6e, 0x74, 0x49, 0x64, 0x65, 0x6e, 0x74, 0x69, 0x66, 0x69,
+    0x65, 0x72,
+];
+global KEY_VALUE: [u8; 13] =
+    [0x6c, 0x65, 0x6c, 0x65, 0x6d, 0x65, 0x6e, 0x74, 0x56, 0x61, 0x6c, 0x75, 0x65];
 
 // Decodes the CBOR unsigned integer (major type 0) at the start of field, in any of its encodings
 // (1, 2, 3, 5 or 9 bytes, preferred or not; bytes after it are ignored). Returns the value, its
@@ -55,15 +57,21 @@ pub fn decode_uint<let N: u32>(field: [u8; N]) -> (u64, u32, [bool; 5]) {
     (v as u64, len, flags)
 }
 
-// Decodes a CBOR full-date (RFC 8943), tag 1004 over a 10-byte text string "YYYY-MM-DD", i.e.
-// D9 03 EC 6A <date>, and returns the date as "DD/MM/YYYY"
-pub fn decode_full_date(cbor: [u8; 14]) -> [u8; 10] {
+// Decodes the CBOR full-date (RFC 8943) at cbor[off..], tag 1004 over a 10-byte text string
+// "YYYY-MM-DD", i.e. D9 03 EC 6A <date>, as the number YYYYMMDD
+pub fn decode_full_date<let N: u32>(cbor: [u8; N], off: u32) -> u32 {
     let prefix = [0xD9, 0x03, 0xEC, 0x6A];
     for i in 0..4 {
-        assert(cbor[i] == prefix[i], "Not a CBOR full-date");
+        assert(cbor[off + i] == prefix[i], "Not a CBOR full-date");
     }
-    assert((cbor[8] == 45) & (cbor[11] == 45), "Not a YYYY-MM-DD date");
-    [cbor[12], cbor[13], 47, cbor[9], cbor[10], 47, cbor[4], cbor[5], cbor[6], cbor[7]]
+    assert((cbor[off + 8] == 45) & (cbor[off + 11] == 45), "Not a YYYY-MM-DD date");
+    let mut date: u32 = 0;
+    for i in [4, 5, 6, 7, 9, 10, 12, 13] {
+        let c = cbor[off + i];
+        assert((c >= 48) & (c <= 57), "Not a YYYY-MM-DD date");
+        date = date * 10 + (c - 48) as u32;
+    }
+    date
 }
 
 // Decodes cbor, which must be exactly a CBOR text string of N < 24 bytes (head 0x60 + N)
@@ -91,101 +99,193 @@ pub fn decode_digest<let N: u32, let M: u32>(cbor: [u8; M]) -> [u8; N] {
     out
 }
 
-// Checks that random is a CBOR bstr of RANDOM_LEN bytes (preferred head)
-pub fn check_random(random: [u8; RANDOM_CBOR_LEN]) {
-    if RANDOM_LEN < 24 {
-        assert(random[0] == 0x40 + RANDOM_LEN as u8, "random is not a 16-byte CBOR bstr");
-    } else {
-        assert(random[0] == 0x58, "random is not a CBOR bstr");
-        assert(random[1] == RANDOM_LEN as u8, "random has the wrong length");
-    }
+// The parsed IssuerSignedItemBytes: the digestID, and where the elementValue is in the item.
+pub struct Item {
+    pub digest_id: u64,
+    pub value_off: u32,
+    pub value_len: u32,
 }
 
-// src[i - shift] for the flagged shift of 1, 2, 3, 5 or 9, or 0 when out of range
-fn shifted<let N: u32>(src: [Field; N], flags: [bool; 5], i: u32) -> Field {
-    let shifts = [1, 2, 3, 5, 9];
-    let mut out = 0;
-    for s in 0..5 {
-        if i >= shifts[s] {
-            if i - shifts[s] < N {
-                out += flags[s] as Field * src[i - shifts[s]];
+// Size of the CBOR data item at buf[off..], computed outside the circuit (a hint)
+unconstrained fn cbor_item_len<let N: u32>(buf: [u8; N], off: u32) -> u32 {
+    let mut pos = off;
+    let mut left: u32 = 1;
+    for _ in 0..N {
+        if (left != 0) & (pos + 2 < N) {
+            let b = buf[pos] as u32;
+            let (major, ai) = (b / 32, b % 32);
+            let (arg, head) = if ai < 24 {
+                (ai, 1)
+            } else if ai == 24 {
+                (buf[pos + 1] as u32, 2)
+            } else if ai == 25 {
+                (buf[pos + 1] as u32 * 256 + buf[pos + 2] as u32, 3)
+            } else if ai == 26 {
+                (0, 5)
+            } else {
+                (0, 9)
+            };
+            left -= 1;
+            pos += head;
+            if (major == 2) | (major == 3) {
+                pos += arg;
+            }
+            if major == 4 {
+                left += arg;
+            }
+            if major == 5 {
+                left += 2 * arg;
+            }
+            if major == 6 {
+                left += 1;
             }
         }
+    }
+    pos - off
+}
+
+// Offsets of the four entries (digestID, random, elementIdentifier, elementValue), their order in
+// the item, and the length of the elementValue, computed outside the circuit (a hint)
+unconstrained fn item_layout<let N: u32>(item: [u8; N], first: u32) -> ([u32; 4], [u32; 4], u32) {
+    let mut offs = [0; 4];
+    let mut order = [0; 4];
+    let mut value_len = 0;
+    let mut pos = first;
+    for j in 0..4 {
+        if pos < N {
+            let b = item[pos];
+            let k = if b == KEY_DIGEST_ID[0] {
+                0
+            } else if b == KEY_RANDOM[0] {
+                1
+            } else if b == KEY_ELEMENT_ID[0] {
+                2
+            } else {
+                3
+            };
+            let key_len = [9, 7, 18, 13][k];
+            offs[k] = pos;
+            order[j] = k;
+            let len = cbor_item_len(item, pos + key_len);
+            if k == 3 {
+                value_len = len;
+            }
+            pos += key_len + len;
+        }
+    }
+    (offs, order, value_len)
+}
+
+// Parses IssuerSignedItemBytes, item[0..len], as issued: #6.24(bstr) over a map of the four
+// entries in any order, with the elementIdentifier `element_id` (a text string shorter than 24
+// bytes). Checks the tag and bstr head, the map head, each key, digestID (a CBOR uint), random (a
+// bstr of MIN_RANDOM_LEN to MAX_RANDOM_LEN bytes) and the elementIdentifier, and that the entries
+// are contiguous and fill the map. The elementValue is what remains; the caller checks that
+// item[value_off..value_off + value_len] is exactly one CBOR item of the expected type, which makes
+// the split of the item into entries unique.
+pub fn parse_item<let N: u32, let E: u32>(item: [u8; N], len: u32, element_id: [u8; E]) -> Item {
+    assert(E < 24);
+    assert(len <= N, "IssuerSignedItemBytes exceeds the maximum size");
+    // reads past the item (within the bound) are zeros
+    let mut buf: [u8; N + 64] = [0; N + 64];
+    for i in 0..N {
+        buf[i] = item[i];
+    }
+    // D8 18, then the bstr head: 58 LL or 59 LL LL
+    assert((buf[0] == 0xD8) & (buf[1] == 0x18), "Not IssuerSignedItemBytes (#6.24)");
+    let short = buf[2] == 0x58;
+    assert(short | (buf[2] == 0x59), "Not IssuerSignedItemBytes (bstr head)");
+    let first = if short { 5 } else { 6 };
+    let inner = if short {
+        buf[3] as u32
+    } else {
+        buf[3] as u32 * 256 + buf[4] as u32
+    };
+    assert(inner == len - (first - 1), "IssuerSignedItemBytes length mismatch");
+    assert(buf[first - 1] == 0xA4, "IssuerSignedItem is not a map of 4 entries");
+
+    // Safety: the offsets, order and value length are checked below
+    let (offs, order, value_len) = unsafe { item_layout(buf, first) };
+
+    // the keys
+    for k in 0..9 {
+        assert(buf[offs[0] + k] == KEY_DIGEST_ID[k], "Invalid digestID key");
+    }
+    for k in 0..7 {
+        assert(buf[offs[1] + k] == KEY_RANDOM[k], "Invalid random key");
+    }
+    for k in 0..18 {
+        assert(buf[offs[2] + k] == KEY_ELEMENT_ID[k], "Invalid elementIdentifier key");
+    }
+    for k in 0..13 {
+        assert(buf[offs[3] + k] == KEY_VALUE[k], "Invalid elementValue key");
+    }
+    // digestID: a CBOR uint
+    let mut id_bytes = [0; MAX_UINT_LEN];
+    for k in 0..MAX_UINT_LEN {
+        id_bytes[k] = buf[offs[0] + 9 + k];
+    }
+    let (digest_id, id_len, _) = decode_uint(id_bytes);
+    // random: a bstr of MIN_RANDOM_LEN to MAX_RANDOM_LEN bytes, head 40+n (n < 24) or 58 n
+    let rh = buf[offs[1] + 7];
+    let r_short = (rh >= 0x40) & (rh < 0x58);
+    assert(r_short | (rh == 0x58), "random is not a CBOR byte string");
+    let r_len = if r_short {
+        (rh - 0x40) as u32
+    } else {
+        buf[offs[1] + 8] as u32
+    };
+    assert(
+        (r_len >= MIN_RANDOM_LEN) & (r_len <= MAX_RANDOM_LEN),
+        "random has an unsupported length",
+    );
+    let r_head = if r_short { 1 } else { 2 };
+    // elementIdentifier: the text string element_id
+    assert(buf[offs[2] + 18] == 0x60 + E as u8, "Wrong elementIdentifier");
+    for k in 0..E {
+        assert(buf[offs[2] + 19 + k] == element_id[k], "Wrong elementIdentifier");
+    }
+    // the entries in the hinted order are contiguous and fill the map
+    let seg = [9 + id_len, 7 + r_head + r_len, 19 + E, 13 + value_len];
+    for i in 0..4 {
+        assert(order[i] < 4, "Invalid entry order");
+        for j in 0..i {
+            assert(order[i] != order[j], "Invalid entry order");
+        }
+    }
+    let mut pos = first;
+    for j in 0..4 {
+        assert(offs[order[j]] == pos, "IssuerSignedItem entries are not contiguous");
+        pos += seg[order[j]];
+    }
+    assert(pos == len, "IssuerSignedItem entries do not fill the item");
+    Item { digest_id, value_off: offs[3] + 13, value_len }
+}
+
+// The elementValue of a parsed item as an array of V bytes (zeros after value_len)
+pub fn item_value<let N: u32, let V: u32>(item: [u8; N], parsed: Item) -> [u8; V] {
+    assert(parsed.value_len <= V, "elementValue exceeds the maximum size");
+    let mut buf: [u8; N + V] = [0; N + V];
+    for i in 0..N {
+        buf[i] = item[i];
+    }
+    let mut out = [0; V];
+    for i in 0..V {
+        out[i] = (i < parsed.value_len) as u8 * buf[parsed.value_off + i];
     }
     out
 }
 
-// IssuerSignedItemBytes from the CBOR-encoded digestID, random and elementValue (value[0..value_len])
-// and the constant elementIdentifier `element_id` (a tstr shorter than 24 bytes), followed by the
-// byte `marker` (0x80 for SHA-2 padding) and zeros. digestID and random are checked to be a
-// single CBOR uint and bstr, and the length of digestID is taken from its encoding; the caller
-// checks that the elementValue is a single item of the expected type and passes its length. Each byte is a selection over the five
-// possible digestID lengths rather than a write at a variable offset. Returns the bytes and the
-// length of the item.
-pub fn issuer_signed_item<let E: u32, let V: u32>(
-    digest_id: [u8; MAX_UINT_LEN],
-    random: [u8; RANDOM_CBOR_LEN],
-    element_id: [u8; E],
-    value: [u8; V],
-    value_len: u32,
-    marker: Field,
-) -> ([Field; HEAD_LEN + MAX_UINT_LEN + RANDOM_PART_LEN + 1 + E + VALUE_KEY_LEN + V + 1], u32) {
-    assert(E < 24);
-    assert(value_len <= V);
-    let (_, digest_id_len, id_flags) = decode_uint(digest_id);
-    check_random(random);
-    let len = HEAD_LEN + digest_id_len + RANDOM_PART_LEN + 1 + E + VALUE_KEY_LEN + value_len;
-    // #6.24(bstr) with a one-byte length
-    assert(len - 4 < 256, "IssuerSignedItem longer than 255 bytes");
-
-    // Everything after the digestID, followed by the marker
-    let mut tail = [0; RANDOM_PART_LEN + 1 + E + VALUE_KEY_LEN + V + 1];
-    let mut k = 0;
-    for c in [0x66].concat("random".as_bytes()) {
-        tail[k] = c as Field;
-        k += 1;
+// item[0..len] followed by the byte `marker` (0x80 for SHA-2 padding) and zeros
+pub fn item_message<let N: u32>(item: [u8; N], len: u32, marker: Field) -> [Field; N + 1] {
+    let mut msg = [0; N + 1];
+    for i in 0..N {
+        msg[i] = (i < len) as Field * item[i] as Field;
     }
-    for i in 0..RANDOM_CBOR_LEN {
-        tail[k] = random[i] as Field;
-        k += 1;
+    for i in 0..(N + 1) {
+        msg[i] += (i == len) as Field * marker;
     }
-    for c in [0x71].concat("elementIdentifier".as_bytes()) {
-        tail[k] = c as Field;
-        k += 1;
-    }
-    assert(k == RANDOM_PART_LEN);
-    tail[k] = 0x60 + E as Field;
-    k += 1;
-    for i in 0..E {
-        tail[k] = element_id[i] as Field;
-        k += 1;
-    }
-    for c in [0x6C].concat("elementValue".as_bytes()) {
-        tail[k] = c as Field;
-        k += 1;
-    }
-    for i in 0..(V + 1) {
-        if i < V {
-            tail[k + i] = (i < value_len) as Field * value[i] as Field;
-        }
-        tail[k + i] += (i == value_len) as Field * marker;
-    }
-
-    let mut msg = [0; HEAD_LEN + MAX_UINT_LEN + RANDOM_PART_LEN + 1 + E + VALUE_KEY_LEN + V + 1];
-    let head = [0xD8, 0x18, 0x58, 0, 0xA4, 0x68].concat("digestID".as_bytes());
-    for i in 0..HEAD_LEN {
-        msg[i] = head[i] as Field;
-    }
-    msg[3] = (len - 4) as Field;
-    // digestID, then the tail shifted by the length of the digestID
-    for i in 0..(msg.len() - HEAD_LEN) {
-        let mut c = shifted(tail, id_flags, i);
-        if i < MAX_UINT_LEN {
-            c += (i < digest_id_len) as Field * digest_id[i] as Field;
-        }
-        msg[HEAD_LEN + i] = c;
-    }
-    (msg, len)
+    msg
 }
 
 // Merkle-Damgard padding: copies msg (which already holds the 0x80 byte) into BLOCKS blocks of
@@ -212,17 +312,10 @@ pub fn md_pad<let N: u32, let B: u32, let L: u32, let BLOCKS: u32>(
     (padded, last)
 }
 
-// SHA-256(IssuerSignedItemBytes), hashing the padded item block by block
-pub fn sha256_item_digest<let E: u32, let V: u32>(
-    digest_id: [u8; MAX_UINT_LEN],
-    random: [u8; RANDOM_CBOR_LEN],
-    element_id: [u8; E],
-    value: [u8; V],
-    value_len: u32,
-) -> [u8; 32] {
-    let (item, len) = issuer_signed_item(digest_id, random, element_id, value, value_len, 0x80);
-    let (msg, last): ([Field; 64 * ((HEAD_LEN + MAX_UINT_LEN + RANDOM_PART_LEN + 1 + E + VALUE_KEY_LEN + V + 1 + 8 + 63) / 64)], [bool; (HEAD_LEN + MAX_UINT_LEN + RANDOM_PART_LEN + 1 + E + VALUE_KEY_LEN + V + 1 + 8 + 63) / 64]) =
-        md_pad::<_, 64, 8, _>(item, len);
+// SHA-256(item[0..len]), hashing the padded item block by block
+pub fn sha256_item_digest<let N: u32>(item: [u8; N], len: u32) -> [u8; 32] {
+    let (msg, last): ([Field; 64 * ((N + 1 + 8 + 63) / 64)], [bool; (N + 1 + 8 + 63) / 64]) =
+        md_pad::<_, 64, 8, _>(item_message(item, len, 0x80), len);
 
     let mut state: [u32; 8] = [
         0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
@@ -260,125 +353,4 @@ pub fn field_from_be_bytes(bytes: [u8; 32]) -> Field {
         f = f * 256 + bytes[i] as Field;
     }
     f
-}
-
-// Items whose padding ends at or next to a block boundary, with 1- and 9-byte digestIDs
-// (the latter in a non-preferred encoding), checked against Python's hashlib
-#[test]
-fn test_block_boundaries() {
-    let random: [u8; RANDOM_CBOR_LEN] = [80, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
-    // 118-byte item, digestID 07
-    let value: [u8; 64] = [
-        88, 33, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116,
-        117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    ];
-    assert(
-        sha256_item_digest(
-            [7, 0, 0, 0, 0, 0, 0, 0, 0],
-            random,
-            "age_in_years".as_bytes(),
-            value,
-            35,
-        )
-            == [
-                252, 104, 16, 123, 136, 35, 149, 160, 101, 106, 153, 103, 173, 1, 105, 196, 26, 136,
-                168, 48, 226, 115, 1, 123, 252, 65, 139, 221, 198, 75, 168, 13,
-            ],
-    );
-    // 119-byte item, digestID 07
-    let value: [u8; 64] = [
-        88, 34, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116,
-        117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    ];
-    assert(
-        sha256_item_digest(
-            [7, 0, 0, 0, 0, 0, 0, 0, 0],
-            random,
-            "age_in_years".as_bytes(),
-            value,
-            36,
-        )
-            == [
-                75, 82, 118, 88, 218, 49, 255, 12, 224, 252, 236, 221, 25, 20, 38, 165, 46, 132,
-                140, 92, 45, 91, 206, 55, 252, 69, 100, 66, 129, 130, 164, 221,
-            ],
-    );
-    // 120-byte item, digestID 07
-    let value: [u8; 64] = [
-        88, 35, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116,
-        117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    ];
-    assert(
-        sha256_item_digest(
-            [7, 0, 0, 0, 0, 0, 0, 0, 0],
-            random,
-            "age_in_years".as_bytes(),
-            value,
-            37,
-        )
-            == [
-                148, 56, 128, 63, 143, 49, 33, 228, 209, 95, 90, 42, 94, 36, 137, 126, 141, 105,
-                243, 81, 66, 121, 110, 180, 77, 182, 37, 59, 159, 201, 8, 233,
-            ],
-    );
-    // 118-byte item, digestID 1b0000000000000007
-    let value: [u8; 64] = [
-        88, 25, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116,
-        117, 118, 119, 120, 121, 122, 123, 124, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    ];
-    assert(
-        sha256_item_digest(
-            [27, 0, 0, 0, 0, 0, 0, 0, 7],
-            random,
-            "age_in_years".as_bytes(),
-            value,
-            27,
-        )
-            == [
-                49, 7, 43, 231, 237, 79, 1, 12, 133, 86, 214, 167, 20, 40, 178, 35, 160, 168, 243,
-                45, 32, 166, 149, 181, 234, 208, 209, 87, 149, 224, 13, 198,
-            ],
-    );
-    // 119-byte item, digestID 1b0000000000000007
-    let value: [u8; 64] = [
-        88, 26, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116,
-        117, 118, 119, 120, 121, 122, 123, 124, 125, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    ];
-    assert(
-        sha256_item_digest(
-            [27, 0, 0, 0, 0, 0, 0, 0, 7],
-            random,
-            "age_in_years".as_bytes(),
-            value,
-            28,
-        )
-            == [
-                96, 236, 222, 93, 230, 183, 188, 246, 116, 204, 194, 251, 219, 246, 199, 97, 218,
-                95, 6, 103, 4, 112, 56, 4, 196, 247, 212, 163, 93, 230, 36, 110,
-            ],
-    );
-    // 120-byte item, digestID 1b0000000000000007
-    let value: [u8; 64] = [
-        88, 27, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116,
-        117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    ];
-    assert(
-        sha256_item_digest(
-            [27, 0, 0, 0, 0, 0, 0, 0, 7],
-            random,
-            "age_in_years".as_bytes(),
-            value,
-            29,
-        )
-            == [
-                185, 58, 225, 18, 102, 13, 253, 142, 141, 251, 38, 152, 27, 33, 234, 146, 207, 158,
-                116, 149, 170, 46, 254, 215, 48, 107, 52, 128, 34, 108, 39, 113,
-            ],
-    );
 }

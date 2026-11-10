@@ -5,8 +5,8 @@ Two papers in this directory are ported to Noir:
 - Longfellow (`longfellow.pdf`), in `implementations/longfellow`;
 - VegaSC (`vega.pdf`), in `implementations/vega`.
 
-The other variants (`sha256`, `sha256-iso`, …) are this repository's own designs and are not
-ports. For the papers that are not ported, see `NOT_PORTED.md`.
+The other variants (`base`, `sha256-iso`, `sha512-iso`, `poseidon-iso`) are this repository's
+own designs and are not ports. For the papers that are not ported, see `NOT_PORTED.md`.
 
 ## Approach
 
@@ -17,13 +17,21 @@ proving time between variants therefore come from the relations alone.
 
 The ports share the following with the other ISO variants:
 
-- **Item.** `IssuerSignedItemBytes` is built and hashed by `implementations/iso/common/lib`, so every
-  variant hashes the attribute identically.
-- **Predicates.** All variants use the same four scenarios: `int`, `age`, `nationality` and `str`.
+- **Item.** The `IssuerSignedItemBytes` is received as issued and parsed by
+  `implementations/iso/common/lib`: its four entries in any order (the standard fixes no order),
+  a `random` of 16 to 32 bytes, its `digestID` and `elementIdentifier`. It is hashed by the same
+  code in every variant.
+- **Predicates.** All variants run the same four mDL scenarios, with the predicates of
+  `implementations/iso/common/lib/src/predicates.nr`:
+  - `age`: `birth_date`, a full-date;
+  - `rental`: `driving_privileges`, an array of maps, parsed in the circuit;
+  - `residence`: `resident_postal_code`, a text string;
+  - `veteran`: `veteran` in the AAMVA namespace, an unsigned integer.
+
   The value is private and only the predicate result is revealed.
-- **Credentials.** Both ports run on the same credentials. Vega's inputs are derived from
-  Longfellow's (`implementations/vega/generate.py`). The credentials are synthetic mdocs built by
-  `implementations/longfellow/generate.py` with a locally generated issuer key.
+- **Credentials.** Both ports run on the same credentials: four mDLs issued by pyMDOC-CBOR, an
+  implementation independent of the circuits, with a test PKI. The device side of each in-person
+  session is built by the test harness and signed with pycose. See `credentials/README.md`.
 
 Below, each port lists two kinds of change:
 
@@ -58,7 +66,7 @@ p256.verify((r2, s2), H(tr || hdr), (pk_dx, pk_dy))
 | `e1 = SHA256(MSO[0:len])` | SHA-256 over the issuer-signed bytes, at most 2231 bytes (35 blocks, the bound in the paper's Table 13). The bytes hashed are the COSE `Sig_structure` around the MSO, since that is what the issuer's ECDSA signature covers. |
 | Parsing witnesses `c` | An in-circuit CBOR parser (paper §4.3). The tokenizer finds every token start in the MSO (Algorithm 6). A stack of open containers gives each token its parent container and whether it is a map key or a value, which is the information in Algorithm 8's tree addresses. The MSO must be exactly one CBOR map that ends at `len`. |
 | `h2 = MSO[valueDigests][ns][X]` | The namespace is a key of the map stored under the top-level key `valueDigests`. The digest key is a key of the namespace's map, decodes to the item's `digestID`, and is followed by a 32-byte bstr. |
-| `h2 = SHA256(nonce, attr, Z)` | `SHA256(IssuerSignedItemBytes(digestID, random, elementIdentifier, elementValue))`, built with the `iso` library. |
+| `h2 = SHA256(nonce, attr, Z)` | `SHA256(IssuerSignedItemBytes)` of the item as issued, parsed with the `iso` library (its `digestID` and `elementIdentifier` are checked, and the predicate reads its `elementValue`). |
 | Device key, `validFrom`, `validUntil` | `deviceKey` is a key of `MSO[deviceKeyInfo]`, and `validFrom` and `validUntil` are keys of `MSO[validityInfo]`. Each key's bytes must match, and its value is read right after it. |
 | `t_start < t_now < t_end` | Both bounds are checked against a public CBOR `tdate`. |
 | Two `p256.verify` | Noir's `std::ecdsa_secp256r1::verify_signature`, twice. |
@@ -85,13 +93,15 @@ unsigned witness.
    starts as Algorithm 6, and the container stack does Algorithm 8's job.
 
    This adds two completeness bounds (soundness is unaffected):
-   - at most 256 tokens; the test MSOs have about 130 in roughly 2000 bytes, since an MSO is
+   - at most 256 tokens; the test MSOs have 104 to 106 in 1559 to 1595 bytes, since an MSO is
      mostly digests, keys and dates;
    - at most four nested containers that are not the last child of their parent; a standard MSO
      needs three.
 
-   Walking per token rather than per byte also makes the circuit smaller: 440k gates for `int`,
-   against 474k for the earlier per-byte tokenizer, which did not track positions.
+   Walking per token rather than per byte also made the circuit smaller than the earlier per-byte
+   tokenizer, which did not track positions: 440k against 474k gates on the earlier test
+   credentials. The parser is `implementations/iso/common/lib/src/cbor.nr`; the `rental`
+   predicate parses `driving_privileges` with it as well.
 3. **ECDSA.** The paper's circuit does the P-256 arithmetic natively over Fp256. Over BN254 the
    port uses Noir's P-256 black box. The relation (a valid ECDSA signature) is unchanged.
 
@@ -102,8 +112,10 @@ unsigned witness.
    here does. The item hash is the same; only the visibility of `Z` and the added predicate
    differ.
 2. **Item preimage.** `SHA256(nonce, attr, Z)` stands for the ISO `IssuerSignedItemBytes` and is
-   implemented as such. The paper's nonce is the item's `random`, and `digestID` is included
-   because ISO 18013-5 includes it.
+   implemented as such, on the bytes as issued. The paper's nonce is the item's `random`, and
+   `digestID` is included because ISO 18013-5 includes it. The namespace is a public input, as
+   `attr` is: `veteran` is in `org.iso.18013.5.1.aamva`, the other elements in
+   `org.iso.18013.5.1`.
 3. **Paths are checked through parent containers.** Algorithm 8 compares full tree addresses.
    The port checks the same paths one step at a time instead. For example,
    `MSO[validityInfo][validUntil]` holds when:
@@ -122,9 +134,9 @@ Tests: `implementations/longfellow/test_soundness.py` checks that the circuit re
 
 - fields placed after the hashed bytes;
 - an item whose `digestID` does not match its MSO entry;
-- fields at the right bytes but the wrong path. The issuer signs, under another top-level map, an
-  attribute digest under a key `org.iso.18013.5.1`, a later `validUntil`, or the attacker's
-  `deviceKey`. With the path checks removed, the circuit accepts all three.
+- fields at the right bytes but the wrong path. The issuer (pyMDOC-CBOR) signs, under the MSO's
+  `status` entry, an attribute digest under a key `org.iso.18013.5.1`, a later `validUntil`, or
+  the attacker's `deviceKey`. With the path checks removed, the circuit accepts all three.
 
 It also checks that an MSO with a 2-byte-length string is parsed correctly.
 
@@ -179,16 +191,17 @@ The paper leaves the following points open, and Microsoft's public repository ha
 2. **Digest entry.** The paper extracts the digest "using the same lookup protocol". The port
    makes it a third Fig. 7 field with prefix `<digestID> 58 20`, where the `digestID` must equal
    the item's. Fig. 7 checks no enclosing map, so **the namespace is not checked**.
-3. **Item preimage.** The paper hashes a "DOB preimage" without defining it. The port uses
-   `IssuerSignedItemBytes` from the `iso` library, which fixes the `elementIdentifier` and the
-   value.
+3. **Item preimage.** The paper hashes a "DOB preimage" without defining it. The port uses the
+   `IssuerSignedItemBytes` as issued, parsed by the `iso` library, which fixes the
+   `elementIdentifier` and the value.
 4. **Date.** Today is a public CBOR full-date, compared against `validUntil` as midnight.
-5. **Device digest.** The paper's mock device signs a verifier nonce. To reuse the Longfellow
-   credentials and device signatures, the port makes `H_dev` the SHA-256 of the same
-   `Sig_structure(DeviceAuthenticationBytes)`. The verifier computes it outside the circuit,
+5. **Device digest.** The paper's mock device signs a verifier nonce. To reuse the credentials and
+   device signatures of the Longfellow port, the port makes `H_dev` the SHA-256 of the same
+   `Sig_structure(DeviceAuthenticationBytes)` of the in-person session. The verifier computes it outside the circuit,
    whereas Longfellow rebuilds it inside the circuit.
 6. **Size bound.** The port keeps Longfellow's 35 blocks (2231 bytes), not the paper's 1920-byte
-   MSO, so both ports run on the same credentials and bound.
+   MSO, so both ports run on the same credentials and bound. The test credentials sign 1559 to
+   1595 bytes, within both.
 
 Tests: `implementations/vega/test_soundness.py` has 21 checks covering:
 
@@ -199,13 +212,13 @@ Tests: `implementations/vega/test_soundness.py` has 21 checks covering:
 - an MSO with a 2-byte-length string, which must be accepted.
 
 Four tests document **Vega's well-formedness assumption** (§5): the issuer must not sign bytes
-that contain a field prefix outside its real position. The tests forge a `validUntil` or a
-`deviceKey` in two places:
+that contain a field prefix outside its real position. In each test the issuer (pyMDOC-CBOR)
+signs, under the MSO's `status` entry, a forged `validUntil` or `deviceKey` in one of two places:
 
 - inside an issuer-signed byte string;
 - in another issuer-signed map.
 
-VegaSC accepts all four. The Longfellow port rejects them on the same witness: in the byte string
+VegaSC accepts all four. The Longfellow port rejects the same credentials: in the byte string
 the forged bytes do not start a token, and in the other map they are not at the required path.
 This is how the paper defines the relation, not a bug in the port.
 

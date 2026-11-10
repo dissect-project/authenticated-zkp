@@ -1,28 +1,29 @@
 // Noir port of the Longfellow-zk mdoc presentation circuit
 // (Frigo & shelat, "Anonymous Credentials from ECDSA", IACR CiC 3(1), Algorithm 10).
 //
-// verify_mdoc proves, for public (PK_issuer, elementIdentifier, tr, now) and a private CBOR-encoded
-// elementValue, that
+// verify_mdoc proves, for public (PK_issuer, namespace, elementIdentifier, tr, now) and a private
+// IssuerSignedItemBytes as issued, that
 //
 //   e1 = SHA256(Sig_structure(MSO))                       issuer-signed bytes
-//   h2 = MSO[valueDigests][org.iso.18013.5.1][digestID]
-//   h2 = SHA256(IssuerSignedItemBytes(digestID, random, elementIdentifier, elementValue))
+//   h2 = MSO[valueDigests][namespace][digestID]
+//   h2 = SHA256(IssuerSignedItemBytes), whose digestID and elementIdentifier match
 //   (dpk_x, dpk_y) = MSO[deviceKeyInfo][deviceKey][-2, -3]
 //   validFrom < now < validUntil
 //   p256.verify(sig_issuer, e1, PK_issuer)
 //   p256.verify(sig_device, SHA256(tr || hdr), (dpk_x, dpk_y))
 //
+// and returns the parsed item, from which the caller reads the elementValue for its predicate.
 // tr is the CBOR-encoded SessionTranscript and hdr the private COSE framing around it, i.e. the
 // device signs Sig_structure(DeviceAuthenticationBytes) with
 // DeviceAuthentication = ["DeviceAuthentication", tr, docType, DeviceNameSpacesBytes].
-// The MSO paths are checked by parsing the MSO in the circuit (paper Section 4.3): every field must
-// start a CBOR token, and each token's parent container and key/value position are tracked, so a
-// field is accepted only as the value of the key that the path names (e.g. validUntil is a key of
-// the map that is the value of the top-level key validityInfo).
-// The predicate on the attribute is left to the caller. The item fields (digestID, random and the
-// elementValue) are received CBOR-encoded and IssuerSignedItemBytes is built and hashed with the
-// same code as the ISO variants (../../iso/common/lib), so both approaches hash the attribute identically.
-use iso::{decode_uint, MAX_UINT_LEN, RANDOM_CBOR_LEN, sha256_item_digest};
+// The MSO paths are checked by parsing the MSO in the circuit (paper Section 4.3, with the parser
+// of ../../iso/common/lib/src/cbor.nr): every field must start a CBOR token, and each token's
+// parent container and key/value position are tracked, so a field is accepted only as the value
+// of the key that the path names (e.g. validUntil is a key of the map that is the value of the
+// top-level key validityInfo).
+// The item is parsed and hashed with the same code as the ISO variants (../../iso/common/lib), so
+// both approaches hash the attribute identically.
+use iso::{cbor::{self, Tokens}, decode_uint, Item, MAX_UINT_LEN, parse_item, sha256_item_digest};
 use sha256::sha256_var;
 
 // 2231 = 35 * 64 - 9 bytes, the largest message that fits in 35 SHA-256 blocks
@@ -60,10 +61,6 @@ global DEVICE_KEY_INFO: [u8; 14] =
     [0x6d, 0x64, 0x65, 0x76, 0x69, 0x63, 0x65, 0x4b, 0x65, 0x79, 0x49, 0x6e, 0x66, 0x6f]; // tstr "deviceKeyInfo"
 global VALIDITY_INFO: [u8; 13] =
     [0x6c, 0x76, 0x61, 0x6c, 0x69, 0x64, 0x69, 0x74, 0x79, 0x49, 0x6e, 0x66, 0x6f]; // tstr "validityInfo"
-global NAMESPACE: [u8; 18] = [
-    0x71, 0x6f, 0x72, 0x67, 0x2e, 0x69, 0x73, 0x6f, 0x2e, 0x31, 0x38, 0x30, 0x31, 0x33, 0x2e, 0x35,
-    0x2e, 0x31,
-]; // tstr "org.iso.18013.5.1"
 global DEVICE_KEY: [u8; 18] = [
     0x69, 0x64, 0x65, 0x76, 0x69, 0x63, 0x65, 0x4b, 0x65, 0x79, // tstr "deviceKey"
     0xa4, 0x01, 0x02, 0x20, 0x01, 0x21, 0x58, 0x20, // {1: 2, -1: 1, -2: bstr(32) ...
@@ -83,13 +80,13 @@ global DIGEST_ALG: [u8; 24] = [
 ]; // "digestAlgorithm": "SHA-256"
 
 // Private witness shared by all scenarios
-pub struct Mdoc {
+pub struct Mdoc<let N: u32> {
     pub signed: [u8; MAX_SIGNED_LEN], // issuer-signed Sig_structure, zero-padded
     pub signed_len: u32,
     pub issuer_sig: [u8; 64],
-    pub digest_id_cbor: [u8; MAX_UINT_LEN], // digestID as encoded in the item, zero-padded
-    pub random_cbor: [u8; RANDOM_CBOR_LEN], // random as encoded in the item
-    pub ns_off: u32, // CBOR offsets of the MSO fields, see generate.py
+    pub item: [u8; N], // IssuerSignedItemBytes as issued, zero-padded
+    pub item_len: u32,
+    pub ns_off: u32, // CBOR offsets of the MSO fields, see credentials/inputs.py
     pub digest_off: u32,
     pub dk_off: u32,
     pub vf_off: u32,
@@ -147,146 +144,45 @@ fn tdate_to_u64(d: [u8; DATE_LEN]) -> u64 {
     v
 }
 
-// Per-byte CBOR head tables, used as ROM lookups by the tokenizer.
-//   base[b]  token length when it does not depend on the following bytes,
-//            0 if b cannot start a token (definite lengths only, as mandated for mdoc; arrays
-//            and maps with 4- or 8-byte counts are rejected)
-//   ext[b]   1 (resp. 2) if b is a byte/text string head with a 1-byte (resp. 2-byte) length
-//   c0, c1, c2  number of children of the token: c0[b] + c1[b] * b1 + c2[b] * (256 * b1 + b2),
-//            where b1, b2 are the bytes after the head (an array of n items has n children, a
-//            map of n entries 2n, a tag 1, anything else 0)
-fn cbor_tables() -> ([Field; 256], [Field; 256], [Field; 256], [Field; 256], [Field; 256]) {
-    let mut base = [0; 256];
-    let mut ext = [0; 256];
-    let mut c0 = [0; 256];
-    let mut c1 = [0; 256];
-    let mut c2 = [0; 256];
-    for b in 0..256 {
-        let major = b / 32;
-        let ai = b % 32;
-        let is_str = (major == 2) | (major == 3);
-        let is_container = (major == 4) | (major == 5);
-        let head = if ai < 24 {
-            1
-        } else if ai == 24 {
-            2
-        } else if ai == 25 {
-            3
-        } else if ai == 26 {
-            5
-        } else {
-            9
-        };
-        if (ai < 26) | (!is_str & !is_container & (ai < 28)) {
-            base[b] = head as Field;
-            if is_str & (ai < 24) {
-                base[b] = (1 + ai) as Field;
-            }
-            if is_str & (ai == 24) {
-                ext[b] = 1;
-            }
-            if is_str & (ai == 25) {
-                ext[b] = 2;
-            }
-            if is_container {
-                let m = if major == 4 { 1 } else { 2 };
-                if ai < 24 {
-                    c0[b] = (m * ai) as Field;
-                }
-                if ai == 24 {
-                    c1[b] = m as Field;
-                }
-                if ai == 25 {
-                    c2[b] = m as Field;
-                }
-            }
-            if major == 6 {
-                c0[b] = 1;
-            }
-        }
-    }
-    (base, ext, c0, c1, c2)
-}
-
 // Maximum number of CBOR tokens in the MSO. The MSO of an mdoc is mostly digests, keys and
-// dates, about 15 bytes per token (the test credentials have 128 tokens in about 1980 bytes).
+// dates, about 15 bytes per token (the test credentials have about 140 tokens in about 1570 bytes).
 pub global MAX_TOKENS: u32 = 256;
 
-// The parsed MSO: for the j-th token, its offset, the offset of its parent array, map or tag, and
-// the number of the parent's children left after it, which is odd iff the token is a map key.
-struct Tokens {
-    start: [u32; MAX_TOKENS],
-    par: [Field; MAX_TOKENS],
-    rem: [Field; MAX_TOKENS],
+// Asserts that `map` is the offset of a map that is the value of the top-level MSO key `key`,
+// i.e. MSO[key] is that map.
+fn assert_top_level_map<let M: u32, let S: u32>(
+    toks: Tokens<MAX_TOKENS>,
+    signed: [u8; MAX_SIGNED_LEN],
+    map: Field,
+    key: [u8; M],
+    msg: str<S>,
+) {
+    let map_off = map as u32;
+    assert(map_off >= MSO_START + M, msg);
+    // the key is a whole token, so the token that follows it (its value) starts at map_off
+    let key_off = map_off - M;
+    let k = toks.at(key_off, msg);
+    check_at(signed, key_off, key);
+    toks.assert_key_of(k, MSO_START as Field, msg);
+    assert(signed[map_off] >> 5 == 5, msg);
 }
 
-unconstrained fn find_token(start: [u32; MAX_TOKENS], off: u32) -> u32 {
-    let mut j = 0;
-    for k in 0..MAX_TOKENS {
-        if start[k] == off {
-            j = k;
-        }
-    }
-    j
-}
-
-impl Tokens {
-    // Index of the token that starts at `off`; fails if no token starts there.
-    fn at<let S: u32>(self, off: u32, msg: str<S>) -> u32 {
-        // Safety: the hint is checked by the assertion that follows
-        let j = unsafe { find_token(self.start, off) };
-        assert(self.start[j] == off, msg);
-        j
-    }
-
-    // Asserts that the j-th token is a key of a map.
-    fn assert_key<let S: u32>(self, j: u32, msg: str<S>) {
-        assert((self.rem[j] as u8) & 1 == 1, msg);
-    }
-
-    // Asserts that the j-th token is a key of the map at `parent`.
-    fn assert_key_of<let S: u32>(self, j: u32, parent: Field, msg: str<S>) {
-        assert(self.par[j] == parent, msg);
-        self.assert_key(j, msg);
-    }
-
-    // Asserts that `map` is the offset of a map that is the value of the top-level MSO key `key`,
-    // i.e. MSO[key] is that map.
-    fn assert_top_level_map<let M: u32, let S: u32>(
-        self,
-        signed: [u8; MAX_SIGNED_LEN],
-        map: Field,
-        key: [u8; M],
-        msg: str<S>,
-    ) {
-        let map_off = map as u32;
-        assert(map_off >= MSO_START + M, msg);
-        // the key is a whole token, so the token that follows it (its value) starts at map_off
-        let key_off = map_off - M;
-        let k = self.at(key_off, msg);
-        check_at(signed, key_off, key);
-        self.assert_key_of(k, MSO_START as Field, msg);
-        assert(signed[map_off] >> 5 == 5, msg);
-    }
-}
-
-pub fn verify_mdoc<let E: u32, let V: u32>(
+pub fn verify_mdoc<let S: u32, let E: u32, let N: u32>(
     issuer_pk_x: [u8; 32],
     issuer_pk_y: [u8; 32],
     tr: [u8; MAX_TR_LEN],
     tr_len: u32,
     now_cbor: [u8; NOW_CBOR_LEN],
+    namespace: [u8; S], // CBOR text string
     element_id: [u8; E],
-    value: [u8; V], // CBOR-encoded elementValue, zero-padded
-    value_len: u32,
-    mdoc: Mdoc,
-) {
+    mdoc: Mdoc<N>,
+) -> Item {
     let Mdoc {
         signed,
         signed_len,
         issuer_sig,
-        digest_id_cbor,
-        random_cbor,
+        item,
+        item_len,
         ns_off,
         digest_off,
         dk_off,
@@ -341,77 +237,11 @@ pub fn verify_mdoc<let E: u32, let V: u32>(
     //    four entries bound the nesting of containers that are not last children; a standard mdoc
     //    MSO needs three (the MSO, valueDigests and a namespace map), one is spare.
     //    The MSO must be exactly one CBOR item: the stack only empties at signed_len.
-    let (base, ext, c0, c1, c2) = cbor_tables();
     let mut buf: [u8; MAX_SIGNED_LEN + 3] = [0; MAX_SIGNED_LEN + 3];
     for i in 0..MAX_SIGNED_LEN {
         buf[i] = signed[i];
     }
-    let mut toks = Tokens { start: [0; MAX_TOKENS], par: [0; MAX_TOKENS], rem: [0; MAX_TOKENS] };
-    // the MSO item itself is the single child of a virtual container at offset 0
-    let (mut n0, mut n1, mut n2, mut n3): (Field, Field, Field, Field) = (1, 0, 0, 0);
-    let (mut s0, mut s1, mut s2, mut s3): (Field, Field, Field, Field) = (0, 0, 0, 0);
-    let mut pos: u32 = MSO_START;
-    for j in 0..MAX_TOKENS {
-        let at_end = pos == signed_len;
-        let active = 1 - at_end as Field;
-        let r = n0 - 1;
-        toks.start[j] = pos;
-        toks.par[j] = s0;
-        toks.rem[j] = r;
-        let b = buf[pos] as u32;
-        let b1 = buf[pos + 1] as Field;
-        let b2 = buf[pos + 2] as Field;
-        let len0 = base[b];
-        assert((len0 != 0) | at_end, "Invalid CBOR token");
-        // the stack is empty once the MSO item is complete, which must happen at signed_len
-        assert((n0 != 0) | at_end, "MSO is not well-formed CBOR");
-        // ext = 1: + b1, ext = 2: + 256 * b1 + b2 (= 2 * b1 + 254 * b1 + b2)
-        let e = ext[b];
-        let len = len0 + e * b1 + e * (e - 1) * (254 * b1 + b2) / 2;
-        pos += (active * len) as u32;
-        // exactly one of push, replace, dec, pop is 1 for a token of the MSO:
-        //   push     a container with siblings left: the parent stays below it
-        //   replace  a container that is the last child: it takes the parent's entry
-        //   dec      a leaf with siblings left
-        //   pop      a leaf that completes the top container
-        // (cont = push + replace)
-        let children = c0[b] + c1[b] * b1 + c2[b] * (256 * b1 + b2);
-        let cont = active * ((children != 0) as Field);
-        let r_nz = (r != 0) as Field;
-        let push = cont * r_nz;
-        let dec = active * r_nz - push;
-        let pop = active - cont - dec;
-        assert(push * n3 == 0, "MSO is nested too deeply");
-        let at = toks.start[j] as Field;
-        let (m0, m1, m2, m3) = (
-            n0 - dec + cont * (children - n0) + pop * (n1 - n0),
-            n1 + push * (r - n1) + pop * (n2 - n1), n2 + push * (n1 - n2) + pop * (n3 - n2),
-            n3 + push * (n2 - n3) - pop * n3,
-        );
-        let (t0, t1, t2, t3) = (
-            s0 + cont * (at - s0) + pop * (s1 - s0), s1 + push * (s0 - s1) + pop * (s2 - s1),
-            s2 + push * (s1 - s2) + pop * (s3 - s2), s3 + push * (s2 - s3) - pop * s3,
-        );
-        // materialize the state, so that its expressions do not grow across iterations
-        n0 = m0;
-        std::as_witness(n0);
-        n1 = m1;
-        std::as_witness(n1);
-        n2 = m2;
-        std::as_witness(n2);
-        n3 = m3;
-        std::as_witness(n3);
-        s0 = t0;
-        std::as_witness(s0);
-        s1 = t1;
-        std::as_witness(s1);
-        s2 = t2;
-        std::as_witness(s2);
-        s3 = t3;
-        std::as_witness(s3);
-    }
-    assert(pos == signed_len, "MSO is not well-formed CBOR");
-    assert(n0 == 0, "MSO is not well-formed CBOR");
+    let toks: Tokens<MAX_TOKENS> = cbor::parse(buf, MSO_START, signed_len);
     assert(signed[MSO_START] >> 5 == 5, "MSO is not a map");
 
     // Every field read below must lie within the issuer-signed bytes: signed[signed_len..] is
@@ -421,18 +251,19 @@ pub fn verify_mdoc<let E: u32, let V: u32>(
         assert(off + len <= signed_len, "MSO field outside the signed bytes");
     };
 
-    // 4. h2 = MSO[valueDigests][org.iso.18013.5.1][digestID]
+    // 4. h2 = MSO[valueDigests][namespace][digestID]
     let j = toks.at(ns_off, "Namespace is not a CBOR token");
-    field_end(ns_off, NAMESPACE.len() + 1);
-    check_at(signed, ns_off, NAMESPACE);
+    field_end(ns_off, S + 1);
+    check_at(signed, ns_off, namespace);
     toks.assert_key(j, "Namespace is not in valueDigests");
-    toks.assert_top_level_map(
+    assert_top_level_map(
+        toks,
         signed,
         toks.par[j],
         VALUE_DIGESTS,
         "Namespace is not in valueDigests",
     );
-    let map_off = ns_off + 18;
+    let map_off = ns_off + S;
     assert(signed[map_off] >> 5 == 5, "Namespace value is not a map");
     let j = toks.at(digest_off, "Digest key is not a CBOR token");
     toks.assert_key_of(j, map_off as Field, "Digest is outside the namespace");
@@ -440,16 +271,16 @@ pub fn verify_mdoc<let E: u32, let V: u32>(
     // encode it differently
     let key: [u8; MAX_UINT_LEN] = read_at(signed, digest_off);
     let (id_mso, id_len, _) = decode_uint(key);
-    let (id_item, _, _) = decode_uint(digest_id_cbor);
+    let parsed = parse_item(item, item_len, element_id);
+    let id_item = parsed.digest_id;
     assert(id_mso == id_item, "digestID mismatch");
     field_end(digest_off, id_len + 2 + 32);
     assert(signed[digest_off + id_len] == 0x58, "Digest is not a 32-byte bstr");
     assert(signed[digest_off + id_len + 1] == 0x20, "Digest is not a 32-byte bstr");
     let h2: [u8; 32] = read_at(signed, digest_off + id_len + 2);
 
-    // 5. h2 = SHA256(IssuerSignedItemBytes), built from the CBOR-encoded fields
-    assert(value_len <= V, "elementValue exceeds maximum size");
-    let item_hash = sha256_item_digest(digest_id_cbor, random_cbor, element_id, value, value_len);
+    // 5. h2 = SHA256(IssuerSignedItemBytes), the item as issued (parsed above)
+    let item_hash = sha256_item_digest(item, item_len);
     assert(item_hash == h2, "Attribute digest verification has failed");
 
     // 6. (dpk_x, dpk_y) = MSO[deviceKeyInfo][deviceKey][-2, -3], docType and digest algorithm
@@ -462,7 +293,8 @@ pub fn verify_mdoc<let E: u32, let V: u32>(
     assert(signed[dk_off + 52] == 0x20, "Invalid deviceKey");
     let dpk_y: [u8; 32] = read_at(signed, dk_off + 53);
     toks.assert_key(j, "deviceKey is not in deviceKeyInfo");
-    toks.assert_top_level_map(
+    assert_top_level_map(
+        toks,
         signed,
         toks.par[j],
         DEVICE_KEY_INFO,
@@ -485,7 +317,8 @@ pub fn verify_mdoc<let E: u32, let V: u32>(
     field_end(vu_off, VALID_UNTIL.len() + DATE_LEN);
     check_at(signed, vu_off, VALID_UNTIL);
     toks.assert_key(jf, "validFrom is not in validityInfo");
-    toks.assert_top_level_map(
+    assert_top_level_map(
+        toks,
         signed,
         toks.par[jf],
         VALIDITY_INFO,
@@ -526,4 +359,5 @@ pub fn verify_mdoc<let E: u32, let V: u32>(
         std::ecdsa_secp256r1::verify_signature(dpk_x, dpk_y, device_sig, e2),
         "Device signature verification has failed",
     );
+    parsed
 }

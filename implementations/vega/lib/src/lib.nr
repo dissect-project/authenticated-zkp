@@ -2,8 +2,8 @@
 // (Kaviani & Setty, "Vega: Low-Latency Zero-Knowledge Proofs over Existing Credentials",
 // IEEE S&P 2026, Figure 9a), with the gadgets of Figure 3 (SHA256_SC) and Figure 7 (ExtractFields).
 //
-// verify_mdoc proves, for public (Q_I, H_dev, today, elementIdentifier) and a private CBOR-encoded
-// elementValue, that
+// verify_mdoc proves, for public (Q_I, H_dev, today, elementIdentifier) and a private
+// IssuerSignedItemBytes as issued, that
 //
 //   1. (deviceKey, validUntil, digest entry) <- ExtractFields(MSO, addr, vals)
 //   2. today < validUntil
@@ -11,7 +11,8 @@
 //   5. H_MSO = SHA256_SC(MSO)
 //   6. ECDSAVerify(sig_I, H_MSO, Q_I) and ECDSAVerify(sig_D, H_dev, deviceKey)
 //
-// Step 4 (the predicate on the attribute) is left to the caller. As in the paper there is no
+// and returns the parsed item; step 4 (the predicate on the elementValue) is left to the caller.
+// As in the paper there is no
 // CBOR parsing of the MSO: fields are read through lookups at prover-supplied addresses and are
 // recognised by their prefix only, which relies on the issuer signing well-formed MSOs with unique
 // prefixes (Section 5). validFrom, docType and digestAlgorithm are not checked (Figure 9a).
@@ -21,11 +22,11 @@
 //     9052), as in the Longfellow port, so both ports hash the same bytes;
 //   - the digest entry is extracted with the lookup protocol of Figure 7, its prefix being the
 //     CBOR digestID followed by the bstr(32) head 58 20; the namespace is not checked;
-//   - the item is built from its CBOR-encoded fields with ../../iso/common/lib, as in every other variant,
-//     and hashed with SHA256_SC;
+//   - the item is parsed with ../../iso/common/lib, as in every other variant (its digestID and
+//     elementIdentifier, the elementValue it holds), and hashed with SHA256_SC;
 //   - signatures are verified with Noir's ECDSA P-256 black box: the (r, s^-1) form of Figure 6
 //     only pays off when the circuit field is the P-256 base field (T-256).
-use iso::{decode_uint, issuer_signed_item, MAX_UINT_LEN, md_pad, RANDOM_CBOR_LEN};
+use iso::{decode_uint, Item, item_message, MAX_UINT_LEN, md_pad, parse_item};
 use std::hash::sha256_compression;
 
 // Upper bound on the issuer-signed message, in 512-bit blocks: 35 blocks hold up to
@@ -60,15 +61,15 @@ global IV: [u32; 8] = [
 ];
 
 // Private witness shared by all scenarios
-pub struct Mdoc {
+pub struct Mdoc<let N: u32> {
     pub signed: [u8; MSO_PADDED_LEN], // issuer-signed Sig_structure, SHA-256 padded to MSO_BLOCKS
     pub signed_len: u32, // its length before padding
     pub b_mso: [Field; MSO_BLOCKS], // one-hot selector of its last block
     pub addr: [u32; N_LOOKUPS], // Figure 7: positions in the signed bytes
     pub vals: [u8; N_LOOKUPS], // and the bytes found there
     pub issuer_sig: [u8; 64],
-    pub digest_id_cbor: [u8; MAX_UINT_LEN], // digestID as encoded in the item, zero-padded
-    pub random_cbor: [u8; RANDOM_CBOR_LEN], // random as encoded in the item
+    pub item: [u8; N], // IssuerSignedItemBytes as issued, zero-padded
+    pub item_len: u32,
     pub device_sig: [u8; 64],
 }
 
@@ -130,18 +131,11 @@ pub fn sha256_sc<let L: u32>(padded: [u8; 64 * L], len: u32, b: [Field; L]) -> [
     out
 }
 
-// SHA256_SC(IssuerSignedItemBytes): the item is built from its CBOR-encoded fields as in the
-// ISO variants and padded in L blocks; b selects the block where it ends.
-pub fn item_digest<let E: u32, let V: u32, let L: u32>(
-    digest_id: [u8; MAX_UINT_LEN],
-    random: [u8; RANDOM_CBOR_LEN],
-    element_id: [u8; E],
-    value: [u8; V],
-    value_len: u32,
-    b: [Field; L],
-) -> [u8; 32] {
-    let (item, len) = issuer_signed_item(digest_id, random, element_id, value, value_len, 0x80);
-    let (padded, _): ([Field; 64 * L], [bool; L]) = md_pad::<_, 64, 8, L>(item, len);
+// SHA256_SC(IssuerSignedItemBytes): the item as issued, item[0..len], padded in L blocks; b selects
+// the block where it ends.
+pub fn item_digest<let N: u32, let L: u32>(item: [u8; N], len: u32, b: [Field; L]) -> [u8; 32] {
+    let (padded, _): ([Field; 64 * L], [bool; L]) =
+        md_pad::<_, 64, 8, L>(item_message(item, len, 0x80), len);
     let mut bytes = [0; 64 * L];
     for i in 0..(64 * L) {
         bytes[i] = padded[i] as u8;
@@ -247,17 +241,15 @@ fn full_date_to_u64(cbor: [u8; TODAY_CBOR_LEN]) -> u64 {
     v * 1000000
 }
 
-pub fn verify_mdoc<let E: u32, let V: u32, let L: u32>(
+pub fn verify_mdoc<let E: u32, let N: u32, let L: u32>(
     issuer_pk_x: [u8; 32],
     issuer_pk_y: [u8; 32],
     h_dev: [u8; 32],
     today_cbor: [u8; TODAY_CBOR_LEN],
     element_id: [u8; E],
-    value: [u8; V], // CBOR-encoded elementValue, zero-padded
-    value_len: u32,
     b_item: [Field; L],
-    mdoc: Mdoc,
-) {
+    mdoc: Mdoc<N>,
+) -> Item {
     let Mdoc {
         signed,
         signed_len,
@@ -265,29 +257,22 @@ pub fn verify_mdoc<let E: u32, let V: u32, let L: u32>(
         addr,
         vals,
         issuer_sig,
-        digest_id_cbor,
-        random_cbor,
+        item,
+        item_len,
         device_sig,
     } = mdoc;
     assert(signed_len + 9 <= MSO_PADDED_LEN, "Signed MSO exceeds maximum size");
 
     // 1) field extraction
-    let (digest_id, _, _) = decode_uint(digest_id_cbor);
-    let (dpk_x, dpk_y, valid_until, h) = extract_fields(signed, signed_len, addr, vals, digest_id);
+    let parsed = parse_item(item, item_len, element_id);
+    let (dpk_x, dpk_y, valid_until, h) =
+        extract_fields(signed, signed_len, addr, vals, parsed.digest_id);
 
     // 2) valid-until freshness
     assert(full_date_to_u64(today_cbor) < tdate_to_u64(valid_until), "Credential has expired");
 
     // 3) item hashing against the extracted digest
-    assert(value_len <= V, "elementValue exceeds maximum size");
-    let item_hash = item_digest(
-        digest_id_cbor,
-        random_cbor,
-        element_id,
-        value,
-        value_len,
-        b_item,
-    );
+    let item_hash = item_digest(item, item_len, b_item);
     assert(item_hash == h, "Attribute digest verification has failed");
 
     // 5) MSO hashing
@@ -302,4 +287,5 @@ pub fn verify_mdoc<let E: u32, let V: u32, let L: u32>(
         std::ecdsa_secp256r1::verify_signature(dpk_x, dpk_y, device_sig, h_dev),
         "Device signature verification has failed",
     );
+    parsed
 }

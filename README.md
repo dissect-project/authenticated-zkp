@@ -1,39 +1,32 @@
 # Authenticated Witness Binding for ZKPs
 
-A proof of concept exploring **authenticated witness binding for Zero-Knowledge Proofs (ZKPs)** using different hash functions. The core idea is that a trusted source (e.g. an identity document issuer) provides a hash of a private attribute. The ZKP circuit receives that hash as a public input, recomputes it internally over the private attribute, and asserts they match — proving knowledge of the attribute without revealing it.
+A proof of concept exploring **authenticated witness binding for Zero-Knowledge Proofs (ZKPs)** over mobile driving licences (ISO/IEC 18013-5 mDL). An issuer commits to each attribute of the credential: the MSO it signs holds the digest of every `IssuerSignedItemBytes`. The ZKP circuit receives the private item, recomputes its digest, checks it against the issuer's commitment, and proves a predicate on the attribute without revealing it.
 
 ## Overview
 
-Five variations are implemented, differing in the hash function used to bind the private attribute:
+Six variants are implemented. Variants are named as in the benchmark (`tests/comparison.py`); the directory of each is in the project structure below (e.g. `sha256-iso` is `implementations/iso/sha256`).
 
-Variants are named as in the benchmark (`tests/comparison.py`); the directory of each is in the
-project structure below (e.g. `sha256-iso` is `implementations/iso/sha256`).
+| Variant | Authentication | Notes |
+|---|---|---|
+| `base` | None | The predicate only, on the elementValue as issued: the reference for the cost of authentication |
+| `sha256-iso` | SHA-256 item digest | The commitment is the MSO digest of `IssuerSignedItemBytes`, parsed as issued |
+| `sha512-iso` | SHA-512 item digest | As above; ISO/IEC 18013-5 also allows SHA-512 |
+| `poseidon-iso` | Poseidon item digest | As above, for comparison only: ISO/IEC 18013-5 allows only SHA-2 |
+| `longfellow` | SHA-256 + in-circuit ECDSA P-256 | Noir port of the Longfellow-zk mdoc circuit: the issuer-signed MSO is parsed in the circuit with path checks, and the issuer and device signatures are verified |
+| `vega` | SHA-256 + in-circuit ECDSA P-256 | Noir port of the VegaSC mdoc circuit (Figure 9a of the Vega paper): length-hiding SHA-256, lookup-based field extraction without CBOR parsing, issuer and device signatures in-circuit |
 
-| Variation | Hash Function | Notes |
-|-----------|--------------|-------|
-| `base` | None | No hash binding; attribute is not verified against an external commitment |
-| `sha256` | SHA-256 | Supported by the ISO/IEC 18013-5 mDoc standard |
-| `sha512` | SHA-512 | Supported by the ISO/IEC 18013-5 mDoc standard |
-| `mimc` | MiMC BN254 | ZKP-friendly hash function; low circuit complexity |
-| `poseidon` | Poseidon | ZKP-friendly hash function; widely used in ZK protocols |
-| `sha256-iso`, `sha512-iso`, `poseidon-iso`, `base-iso` | as above | ISO/IEC 18013-5 inputs: the commitment is the MSO digest of `IssuerSignedItemBytes` (digestID, random, elementIdentifier, elementValue) and values use their ISO encoding; `poseidon-iso` is for comparison only, as ISO 18013-5 allows only SHA-2. `int`, `age`, `nationality` and `str` scenarios. |
-| `longfellow` | SHA-256 + in-circuit ECDSA P-256 | Noir port of the Longfellow-zk mdoc circuit (in-circuit CBOR parsing of the MSO with path checks, issuer and device signatures verified in-circuit); `int`, `age`, `nationality` and `str` scenarios. |
-| `vega` | SHA-256 + in-circuit ECDSA P-256 | Noir port of the VegaSC mdoc circuit (Figure 9a of the Vega paper: length-hiding SHA-256, lookup-based field extraction without CBOR parsing, issuer and device signatures in-circuit), run on the same credentials as `longfellow`; `int`, `age`, `nationality` and `str` scenarios. |
+`docs/papers/PORTED.md` explains how the two ports follow their papers, and `docs/papers/NOT_PORTED.md` why Crescent and VegaMC are not ported.
 
-Each variation includes three **scenarios**. The primary scenario emulates identity-related attribute proofs:
+Every variant runs four **scenarios**, real mDL presentations, each on an attribute of a different CBOR type:
 
-| Scenario | Name     | Description |
-|----------|----------|-------------|
-| Primary  | `age`    | Prove that a date of birth corresponds to an age above a threshold |
-|          | `int`    | Prove that a private integer satisfies a comparison (e.g. `x > y`) |
-|          | `nationality` | Prove that a nationality code belongs to an allowed list |
-|          | `str`    | Prove that a substring appears within a larger private string (e.g. an address) |
-| VarStr   | varstr-32  | Substring test with string lengths of 32 characters  | 
-|          | varstr-64  | Substring test with string lengths of 64 characters  | 
-|          | varstr-128 | Substring test with string lengths of 128 characters | 
-|          | varstr-256 | Substring test with string lengths of 256 characters | 
-|          | varstr-512 | Substring test with string lengths of 512 characters |
-| 150      | varstr-150 | Substring test with string lengths of 150 characters |
+| Scenario | Use case | Data element | CBOR type | Predicate |
+|---|---|---|---|---|
+| `age` | Online alcohol sale | `birth_date` (`org.iso.18013.5.1`) | full-date (tag 1004) | The holder is at least 21 today |
+| `rental` | Car rental | `driving_privileges` (`org.iso.18013.5.1`) | array of maps | A category B privilege held for at least 2 years and valid until the car is returned |
+| `residence` | Resident discount | `resident_postal_code` (`org.iso.18013.5.1`) | text string | The ZIP code (ZIP or ZIP+4) is in the municipality's range |
+| `veteran` | Veteran discount | `veteran` (`org.iso.18013.5.1.aamva`) | unsigned integer | The value is 1 |
+
+The circuits run on mDLs issued by [pyMDOC-CBOR](https://github.com/IdentityPython/pyMDOC-CBOR), an implementation independent of the circuits, for four test holders: see `credentials/README.md`.
 
 ---
 
@@ -41,65 +34,61 @@ Each variation includes three **scenarios**. The primary scenario emulates ident
 
 ```
 authenticated-zkp/
+├── credentials/              # Test mDLs and the circuit inputs (see credentials/README.md)
+│   ├── holders.py            # The four holders' data and the scenarios' public parameters
+│   ├── issue.py              # Issues the mDLs with pyMDOC-CBOR (test PKI in pki/)
+│   ├── present.py            # In-person presentation sessions and device signatures
+│   ├── inputs.py             # Circuit inputs of every variant from an issued mDL
+│   ├── generate.py           # Writes Prover.toml and the Dart inputs of every circuit
+│   ├── testkit.py            # Helpers of the soundness tests
+│   └── holders/  pki/        # The issued credentials (committed)
 ├── docs/
 │   ├── papers/               # Longfellow, Crescent and Vega papers
 │   │   ├── PORTED.md         # How Longfellow and VegaSC were ported, and every departure
 │   │   └── NOT_PORTED.md     # Why Crescent and VegaMC are not ported
 │   └── testing-app.png       # Screenshot of the testing application
 ├── implementations/
-│   ├── base/                 # Original variants: the attribute is hashed on its own
-│   │   ├── none/             # No hash authentication (variant base)
-│   │   ├── sha256/           # SHA-256 hash version
-│   │   ├── sha512/           # SHA-512 hash version
-│   │   └── poseidon/         # Poseidon hash version
-│   │       └── age/  int/  nationality/  str/  varstr/
+│   ├── base/                 # The predicate only (variant base)
+│   │   └── age/  rental/  residence/  veteran/
 │   │
-│   ├── iso/                  # ISO/IEC 18013-5 variants: the MSO digest of IssuerSignedItemBytes
-│   │   ├── none/             # ISO inputs (CBOR), no hash authentication (variant base-iso)
+│   ├── iso/                  # ISO/IEC 18013-5 item digests
 │   │   ├── sha256/           # SHA-256 digest (variant sha256-iso)
 │   │   ├── sha512/           # SHA-512 digest (variant sha512-iso)
 │   │   ├── poseidon/         # Poseidon digest, comparison only, not ISO (variant poseidon-iso)
-│   │   │   └── age/  int/  nationality/  str/
-│   │   └── common/           # Shared by the ISO variants (lib/ also by longfellow and vega)
-│   │       ├── lib/          # Noir library: CBOR decoding, IssuerSignedItemBytes, SHA-256
+│   │   │   └── age/  rental/  residence/  veteran/
+│   │   └── common/           # Shared by every variant
+│   │       ├── lib/          # Noir library: IssuerSignedItemBytes parsing and SHA-256, the CBOR
+│   │       │                 # parser (cbor.nr) and the scenario predicates (predicates.nr)
 │   │       ├── sha512/       # Noir library: SHA-512 of the item
 │   │       ├── poseidon/     # Noir library: Poseidon of the item
-│   │       ├── hasher/       # Noir program computing the Poseidon digest for generate.py
-│   │       └── generate.py   # Builds (or reads) an item and writes Prover.toml / Dart inputs
+│   │       ├── hasher/       # Noir program computing the Poseidon digest for credentials/
+│   │       └── test_soundness.py # Item parsing and predicate attacks
 │   │
 │   ├── longfellow/           # Noir port of the Longfellow-zk mdoc circuit (see longfellow/README.md)
 │   │   ├── lib/              # Noir library: SHA-256, in-circuit CBOR parsing of the MSO, signatures
-│   │   ├── age/  int/  nationality/  str/
-│   │   ├── generate.py       # Builds a signed credential and writes Prover.toml / Dart inputs
+│   │   ├── age/  rental/  residence/  veteran/
 │   │   └── test_soundness.py # Attacks the circuit must reject, including fields at the wrong path
 │   │
 │   └── vega/                 # Noir port of the VegaSC mdoc circuit (see vega/README.md)
 │       ├── lib/              # Noir library: length-hiding SHA-256, lookup field extraction, signatures
-│       ├── age/  int/  nationality/  str/
-│       ├── generate.py       # Converts the longfellow inputs (same credentials) to Prover.toml / Dart inputs
+│       ├── age/  rental/  residence/  veteran/
 │       └── test_soundness.py # Attacks the circuit must reject, and Vega's parsing assumption
 │
 │   Each scenario directory contains:
 │       ├── src/main.nr       # Noir circuit
 │       ├── Nargo.toml        # Noir package manifest
-│       ├── Prover.toml       # Proof inputs
-│       ├── bytes.sh          # Helper script to compute inputs and hash (base variants)
-│       ├── inputs_*.dart     # Inputs of the four test runs (iso, longfellow and vega variants)
-│       └── target/           # Compiled artifacts and proofs
+│       ├── Prover.toml       # Inputs of holder1
+│       └── inputs_*.dart     # Inputs of the four holders (runs 1 to 4)
 │
-├── scenarios/                # Circuits and inputs run by the testing application
-│   ├── primary/              # age, int, nationality, str
-│   ├── varstr/               # varstr-32 to varstr-512
-│   └── 150/                  # varstr-150
-│
-│   Each scenario directory contains:
-│       ├── circuits/         # Compiled circuits
-│       └── inputs/           # Dart inputs
+├── scenarios/
+│   └── mdl/                  # The circuits and inputs for the testing application
+│       ├── circuits/         # Compiled circuits, <variant>_<scenario>.json
+│       └── inputs/           # Dart inputs of every variant, per scenario
 │
 └── tests/
     ├── comparison.py         # Benchmarks gates and proving times of every variant
     ├── comparison-results.txt  # Output of comparison.py
-    └── testing-app.apk       # Android application to run the scenarios
+    └── testing-app.apk       # Android application (not yet updated to the mDL scenarios)
 ```
 
 ---
@@ -108,15 +97,21 @@ authenticated-zkp/
 
 In order to generate and verify proofs on a local machine, the following needs to be installed:
 
-- [Noir](https://noir-lang.org/) (`nargo`) — circuit language and compiler
-- [Barretenberg](https://github.com/AztecProtocol/aztec-packages/tree/master/barretenberg) (`bb`) — proving backend
+- [Noir](https://noir-lang.org/) (`nargo`, 1.0.0-beta.7) — circuit language and compiler
+- [Barretenberg](https://github.com/AztecProtocol/aztec-packages/tree/master/barretenberg) (`bb`, 0.84.0) — proving backend
+- Python 3 with the packages of `credentials/requirements.txt`, for the credentials and the tests
+
+```
+cd credentials && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+.venv/bin/python generate.py                 # Prover.toml and Dart inputs of every circuit
+cd ../implementations/vega/age && nargo execute
+cd ../../../ && python3 tests/comparison.py  # gates and timings of every circuit
+```
 
 ---
 
 ## Running the Testing Application
 
-The testing application was developed to be installed on Android devices only. Currently, there is no iOS version. After installing the application, the desired tests can be selected, as well as the number of executions. The results are then written to a `.json` file in the testing device. The path is displayed in a message box. The image below demonstrates how this can be done.
+The testing application was developed to be installed on Android devices only. Currently, there is no iOS version. After installing the application, the desired tests can be selected, as well as the number of executions. The results are then written to a `.json` file in the testing device. The path is displayed in a message box. The image below demonstrates how this can be done. The application has not yet been updated to the mDL scenarios of `scenarios/mdl`.
 
 <img src="docs/testing-app.png" alt="Testing application screenshot" width="200" />
-
-

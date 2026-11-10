@@ -1,8 +1,0 @@
-[package]
-name = "str"
-type = "bin"
-authors = [""]
-
-[dependencies]
-vega = { path = "../lib" }
-iso = { path = "../../iso/common/lib" }

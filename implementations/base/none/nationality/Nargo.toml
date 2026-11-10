@@ -1,6 +1,0 @@
-[package]
-name = "nationality"
-type = "bin"
-authors = [""]
-
-[dependencies]

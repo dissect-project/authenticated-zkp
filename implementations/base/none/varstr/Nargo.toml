@@ -1,6 +1,0 @@
-[package]
-name = "varstr"
-type = "bin"
-authors = [""]
-
-[dependencies]

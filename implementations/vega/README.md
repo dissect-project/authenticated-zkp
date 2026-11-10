@@ -8,26 +8,25 @@ with UltraHonk like every other variant in this repository. As with the Longfell
 ```
 vega/
 ├── lib/src/lib.nr      # SHA256_SC (Fig. 3), ExtractFields (Fig. 7), verify_mdoc (Fig. 9a)
-├── age/ int/ nationality/ str/
+├── age/ rental/ residence/ veteran/
 │   ├── src/main.nr     # verify_mdoc + the scenario predicate
 │   ├── Prover.toml
 │   └── inputs_vega_*.dart
-├── generate.py         # Vega inputs from the Longfellow inputs (same credentials)
 └── test_soundness.py   # attacks the circuit must reject, and Vega's parsing assumption
 ```
 
 ## Relation (Figure 9a)
 
 Public: issuer key `Q_I`, device digest `H_dev`, today's date, the `elementIdentifier` and the
-predicate's public input. Private: the issuer-signed bytes, `(addr, vals)`, the one-hot selectors,
-both signatures and the item fields.
+predicate's public inputs. Private: the issuer-signed bytes, `(addr, vals)`, the one-hot
+selectors, both signatures and the `IssuerSignedItemBytes` as issued.
 
 | Step | Paper | `lib/src/lib.nr` |
 |---|---|---|
 | 1 | `ExtractFields(MSO, addr, vals)`: lookup, prefix, contiguity (Fig. 7) | `extract_fields`: `signed[addr[i]] == vals[i]` with `addr[i] < len` (UltraHonk ROM lookups), prefixes of Fig. 8, consecutive addresses per field |
 | 2 | `(Y, M, D) < validUntil` | `full_date_to_u64(today) < tdate_to_u64(validUntil)`, today taken as midnight |
-| 3 | `SHA256_SC(preimage) = MSO[valueDigests][ns][birth_date]` | `item_digest` (SHA256_SC over IssuerSignedItemBytes) `==` the digest extracted in step 1 |
-| 4 | `age ≥ τ` | in `age/src/main.nr`; `int`, `nationality` and `str` use the repository's other predicates |
+| 3 | `SHA256_SC(preimage) = MSO[valueDigests][ns][birth_date]` | `item_digest` (SHA256_SC over IssuerSignedItemBytes, parsed as issued) `==` the digest extracted in step 1 |
+| 4 | `age ≥ τ` | the scenario predicate, on the `elementValue` of the item (`../iso/common/lib/src/predicates.nr`, shared by every variant) |
 | 5 | `H_MSO ← SHA256_SC(MSO)` | `sha256_sc(signed, signed_len, b_mso)`: 35 compressions, padding checked at `d = Σ j·b_j`, digest `Σ b_j H_{j+1}` |
 | 6 | `ECDSAVerify` with `Q_I` and with the extracted device key over `H_dev` | `std::ecdsa_secp256r1::verify_signature`, twice |
 
@@ -36,17 +35,13 @@ Like the paper, the circuit does not parse the MSO as CBOR and checks neither `v
 
 ## Same credentials as Longfellow
 
-`generate.py` reads `../longfellow/SCENARIO/Prover.toml` and every run of
-`../longfellow/SCENARIO/inputs_longfellow_SCENARIO.dart`, and derives the Vega inputs from the same
-issuer-signed bytes, issuer signature, item and device signature. The size bound is the same:
-35 SHA-256 blocks, so at most 2231 signed bytes. Vega's device signs a public digest (the paper's
-mock device signs a verifier nonce). Here `H_dev` is the SHA-256 of the device-signed
-`Sig_structure(DeviceAuthenticationBytes)` of the Longfellow credential. The verifier, who knows
-the session, computes it outside the circuit, while Longfellow rebuilds it inside the circuit.
-
-```
-python3 generate.py SCENARIO --dart     # SCENARIO in int, age, nationality, str
-```
+The inputs come from the mDLs issued by pyMDOC-CBOR in `../../credentials`, the same credentials,
+issuer signatures, items and device signatures as the Longfellow port
+(`credentials/generate.py vega`). The size bound is the same: 35 SHA-256 blocks, so at most 2231
+signed bytes (the test credentials have 1559 to 1595). Vega's device signs a public digest (the
+paper's mock device signs a verifier nonce). Here `H_dev` is the SHA-256 of the device-signed
+`Sig_structure(DeviceAuthenticationBytes)` of the in-person session. The verifier, who knows the
+session, computes it outside the circuit, while Longfellow rebuilds it inside the circuit.
 
 ## Choices the paper leaves open
 
@@ -61,11 +56,13 @@ plain SHA-256 benchmark, but not the mDL circuit, so these follow the paper and 
   Fig. 7 field, with prefix `<digestID> 58 20`, where the digestID must equal the item's.
   Fig. 7 checks no enclosing map, so **the namespace is not checked**. Binding the digest to the
   item still needs a SHA-256 preimage, so the remaining gap is an issuer-signed item with the same
-  `elementIdentifier` in another namespace.
+  `elementIdentifier` in another namespace. (The `veteran` scenario reads an item of the AAMVA
+  namespace; nothing in the circuit depends on which namespace that is.)
 - **Item preimage.** The paper hashes a "DOB preimage" without saying how it is tied to
-  `birth_date` or how the date is read from it. The item is built from its CBOR-encoded fields with
-  `../../iso/common/lib`, as in every other variant, which fixes the `elementIdentifier` and the value,
-  and is then hashed with `SHA256_SC`.
+  `birth_date` or how the date is read from it. The preimage is the `IssuerSignedItemBytes` as
+  issued, parsed with `../../iso/common/lib` as in every other variant (its four entries in any
+  order, its `digestID` and `elementIdentifier`), and hashed with `SHA256_SC`. The predicate reads
+  the `elementValue` from it.
 - **Date.** The public date is a CBOR full-date (`D9 03 EC 6A YYYY-MM-DD`), like `birth_date`,
   compared as midnight against `validUntil`.
 
@@ -84,7 +81,8 @@ plain SHA-256 benchmark, but not the mDL circuit, so these follow the paper and 
 
 ## Soundness tests
 
-`python3 test_soundness.py` builds fresh credentials and checks that the circuit rejects:
+`../../credentials/.venv/bin/python test_soundness.py` takes the committed credentials, or issues
+fresh ones with pyMDOC-CBOR, and checks that the circuit rejects:
 
 - fields read after the hashed message;
 - a mismatched digestID;
@@ -98,15 +96,15 @@ plain SHA-256 benchmark, but not the mDL circuit, so these follow the paper and 
 It also checks that an MSO with a 2-byte-length string is accepted.
 
 The last four tests document **Vega's well-formedness assumption** (§5): the issuer signs
-well-formed MSOs in which every field prefix is unique. Each test forges a `validUntil` or
-`deviceKey` field in one of two places:
+well-formed MSOs in which every field prefix is unique. Each test has the issuer sign, under the
+MSO's `status` entry, a forged `validUntil` or `deviceKey` field in one of two places:
 
 - inside an issuer-signed byte string;
 - in an issuer-signed map other than `validityInfo` or `deviceKeyInfo`.
 
 The VegaSC relation **accepts** the forged field. An expired credential is then presented as
-valid, or a copied credential with the attacker's device key. On the same witness, the Longfellow
-port **rejects** it, because it parses the MSO. In a byte string the forged field does not start a
+valid, or a copied credential with the attacker's device key. The Longfellow
+port **rejects** the same credential, because it parses the MSO. In a byte string the forged field does not start a
 CBOR token; in another map it is not at the path `MSO[validityInfo][validUntil]` or
 `MSO[deviceKeyInfo][deviceKey]`. The attack needs the issuer to sign such bytes. It is not a bug in
 the port but the cost of skipping CBOR parsing.

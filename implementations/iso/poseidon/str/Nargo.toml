@@ -1,8 +1,0 @@
-[package]
-name = "str"
-type = "bin"
-authors = [""]
-
-[dependencies]
-iso = { path = "../../common/lib" }
-iso_poseidon = { path = "../../common/poseidon" }

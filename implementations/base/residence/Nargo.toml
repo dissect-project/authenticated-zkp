@@ -1,0 +1,7 @@
+[package]
+name = "residence"
+type = "bin"
+authors = [""]
+
+[dependencies]
+iso = { path = "../../iso/common/lib" }
