@@ -89,7 +89,6 @@ authenticated-zkp/
     ├── comparison.py         # Benchmarks gates and proving times of every variant
     ├── comparison-results.md   # Report of comparison.py (summary, every circuit, comparisons)
     ├── comparison-results.json # Its raw measurements (--report rebuilds the report from them)
-    ├── proving-time.md       # Why proving time does not follow the gate count
     └── testing-app.apk       # Android application (not yet updated to the mDL scenarios)
 ```
 
@@ -99,8 +98,8 @@ authenticated-zkp/
 
 In order to generate and verify proofs on a local machine, the following needs to be installed:
 
-- [Noir](https://noir-lang.org/) (`nargo`, 1.0.0-beta.7) — circuit language and compiler
-- [Barretenberg](https://github.com/AztecProtocol/aztec-packages/tree/master/barretenberg) (`bb`, 0.84.0) — proving backend
+- [Noir](https://noir-lang.org/) (`nargo`, 1.0.0) — circuit language and compiler
+- [Barretenberg](https://github.com/AztecProtocol/aztec-packages/tree/master/barretenberg) (`bb`, 6.0.0, from the Aztec v6.0.0 release) — proving backend
 - Python 3 with the packages of `credentials/requirements.txt`, for the credentials and the tests
 
 ```

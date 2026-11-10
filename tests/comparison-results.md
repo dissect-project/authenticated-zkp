@@ -1,6 +1,6 @@
 # Benchmark results
 
-`tests/comparison.py`, 10 runs per circuit, 2026-11-10, Apple M2 (Darwin arm64), nargo version = 1.0.0-beta.7, bb v0.84.0. Inputs: holder1 of `credentials/` (the same credential in every variant).
+`tests/comparison.py`, 10 runs per circuit, 2026-11-10, Apple M2 (Darwin arm64), nargo version = 1.0.0, bb 6.0.0. Inputs: holder1 of `credentials/` (the same credential in every variant).
 
 ## Summary
 
@@ -8,93 +8,93 @@ Gates (`bb gates`) and mean proving time (`bb prove`) per variant and scenario.
 
 | Variant | age | rental | residence | veteran |
 | --- | ---: | ---: | ---: | ---: |
-| base (predicate only) | 3.2k · 96 ms | 17.4k · 240 ms | 3.4k · 94 ms | 2.9k · 92 ms |
-| sha256-iso | 19.5k · 353 ms | 68.8k · 674 ms | 19.8k · 340 ms | 19.1k · 335 ms |
-| sha512-iso | 137k · 1.59 s | 348k · 5.24 s | 138k · 1.57 s | 137k · 1.77 s |
-| poseidon-iso | 15.2k · 225 ms | 38.1k · 462 ms | 15.5k · 224 ms | 14.9k · 221 ms |
-| longfellow | 447k · 3.24 s | 493k · 3.67 s | 447k · 3.29 s | 447k · 3.34 s |
-| vega | 318k · 2.43 s | 377k · 2.70 s | 318k · 2.42 s | 317k · 2.41 s |
+| base (predicate only) | 3.2k · 55 ms | 13.6k · 119 ms | 3.3k · 55 ms | 2.9k · 53 ms |
+| sha256-iso | 33.9k · 248 ms | 61.8k · 388 ms | 33.9k · 211 ms | 33.9k · 212 ms |
+| sha512-iso | 47.1k · 362 ms | 119k · 772 ms | 47.2k · 309 ms | 46.8k · 308 ms |
+| poseidon-iso | 14.6k · 152 ms | 30.8k · 225 ms | 14.7k · 140 ms | 14.3k · 139 ms |
+| longfellow | 333k · 1.77 s | 373k · 1.92 s | 333k · 1.75 s | 332k · 1.76 s |
+| vega | 265k · 1.39 s | 316k · 1.64 s | 265k · 1.41 s | 265k · 1.38 s |
 
-Verification takes 36 to 40 ms (median per circuit) for every circuit.
+Verification takes 12 to 14 ms (median per circuit) for every circuit.
 
 ## Every circuit
 
-Mean ± standard deviation in ms. *Build* is the construction of the circuit from the ACIR bytecode (`bb gates`); *Prove* (`bb prove`) includes it. Building grows with the number of ACIR opcodes, not only with the gates: SHA-512 has no black box in Noir and compiles to many small opcodes, so sha512-iso spends a large share of its proving time building the circuit (see `proving-time.md`).
+Mean ± standard deviation in ms. *Build* is the construction of the circuit from the ACIR bytecode (`bb gates`); *Prove* (`bb prove`) includes it, as a mobile prover builds the circuit for every proof. *Gates* is the `circuit_size` of `bb gates`. Its meaning depends on the Barretenberg version (bb 6 counts a block of about 15,300 rows whenever SHA-256 is used, which bb 0.84 did not), so gates are comparable only within one toolchain. The prover pads the circuit to a power of two, so circuits in the same power of two take similar times.
 
 | Circuit | Gates | ACIR opcodes | Witness | Build | Prove | Verify |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| base/age | 3,199 | 311 | 53.3 ± 0.9 | 50.4 ± 4.8 | 96.0 ± 1.8 | 36.3 ± 0.4 |
-| base/rental | 17,410 | 7,201 | 89.6 ± 0.9 | 72.9 ± 0.7 | 240.1 ± 6.1 | 36.7 ± 0.2 |
-| base/residence | 3,426 | 281 | 52.4 ± 0.4 | 48.5 ± 0.3 | 94.2 ± 0.7 | 36.0 ± 0.1 |
-| base/veteran | 2,934 | 56 | 52.3 ± 1.3 | 48.1 ± 0.7 | 92.0 ± 0.9 | 36.1 ± 0.4 |
-| sha256-iso/age | 19,497 | 2,651 | 67.0 ± 4.1 | 73.2 ± 5.9 | 353.1 ± 14.0 | 37.4 ± 1.0 |
-| sha256-iso/rental | 68,817 | 17,472 | 141.9 ± 1.0 | 144.6 ± 0.9 | 673.7 ± 10.4 | 37.1 ± 0.1 |
-| sha256-iso/residence | 19,791 | 2,669 | 66.1 ± 2.3 | 71.0 ± 0.5 | 340.1 ± 8.1 | 37.2 ± 0.6 |
-| sha256-iso/veteran | 19,143 | 2,330 | 64.3 ± 0.9 | 70.2 ± 0.4 | 334.6 ± 7.1 | 37.1 ± 0.6 |
-| sha512-iso/age | 137,439 | 100,085 | 768.5 ± 11.1 | 407.0 ± 7.9 | 1591.6 ± 45.1 | 37.8 ± 0.5 |
-| sha512-iso/rental | 348,490 | 263,723 | 1946.7 ± 49.7 | 2180.5 ± 263.5 | 5237.5 ± 354.4 | 39.4 ± 1.9 |
-| sha512-iso/residence | 137,761 | 100,104 | 764.0 ± 5.1 | 405.2 ± 12.0 | 1574.7 ± 56.8 | 37.9 ± 0.5 |
-| sha512-iso/veteran | 137,087 | 99,764 | 766.2 ± 36.4 | 433.1 ± 63.6 | 1772.7 ± 85.6 | 38.0 ± 0.7 |
-| poseidon-iso/age | 15,230 | 4,945 | 147.3 ± 2.7 | 77.9 ± 0.6 | 225.4 ± 4.0 | 36.8 ± 0.6 |
-| poseidon-iso/rental | 38,149 | 17,522 | 219.9 ± 5.6 | 127.8 ± 3.1 | 461.8 ± 19.1 | 37.3 ± 0.5 |
-| poseidon-iso/residence | 15,525 | 4,963 | 146.9 ± 4.6 | 78.9 ± 1.4 | 224.1 ± 2.8 | 36.8 ± 0.1 |
-| poseidon-iso/veteran | 14,877 | 4,624 | 143.5 ± 1.3 | 77.0 ± 0.6 | 220.9 ± 3.8 | 36.8 ± 0.5 |
-| longfellow/age | 446,889 | 88,976 | 637.9 ± 5.3 | 685.3 ± 18.8 | 3238.6 ± 64.6 | 39.0 ± 0.6 |
-| longfellow/rental | 492,901 | 103,758 | 717.6 ± 8.0 | 750.8 ± 42.1 | 3669.4 ± 207.3 | 39.4 ± 1.3 |
-| longfellow/residence | 446,862 | 88,994 | 670.3 ± 92.0 | 680.6 ± 4.3 | 3285.4 ± 72.6 | 68.2 ± 91.4 |
-| longfellow/veteran | 446,588 | 88,702 | 633.9 ± 4.8 | 679.3 ± 13.6 | 3341.5 ± 40.9 | 38.9 ± 0.7 |
-| vega/age | 317,541 | 17,792 | 132.1 ± 8.9 | 343.5 ± 9.7 | 2433.2 ± 70.4 | 38.2 ± 1.0 |
-| vega/rental | 376,970 | 37,033 | 221.9 ± 1.2 | 429.0 ± 2.3 | 2705.0 ± 37.9 | 38.1 ± 0.7 |
-| vega/residence | 317,945 | 17,904 | 128.0 ± 1.4 | 340.4 ± 3.2 | 2421.8 ± 32.2 | 37.8 ± 0.4 |
-| vega/veteran | 317,272 | 17,565 | 127.2 ± 1.3 | 338.7 ± 0.7 | 2411.2 ± 29.5 | 37.8 ± 0.5 |
+| base/age | 3,222 | 311 | 163.8 ± 3.9 | 8.4 ± 0.1 | 55.1 ± 1.1 | 11.8 ± 0.3 |
+| base/rental | 13,605 | 5,854 | 179.2 ± 4.3 | 15.9 ± 0.4 | 118.7 ± 1.0 | 12.3 ± 0.1 |
+| base/residence | 3,269 | 281 | 159.7 ± 2.6 | 8.1 ± 0.1 | 55.1 ± 1.3 | 11.7 ± 0.3 |
+| base/veteran | 2,935 | 56 | 159.4 ± 0.7 | 8.1 ± 0.1 | 53.3 ± 0.7 | 11.8 ± 0.4 |
+| sha256-iso/age | 33,944 | 2,343 | 178.2 ± 14.1 | 26.8 ± 7.7 | 247.8 ± 30.4 | 13.0 ± 0.3 |
+| sha256-iso/rental | 61,824 | 14,306 | 202.6 ± 0.5 | 55.1 ± 0.1 | 387.9 ± 8.9 | 12.6 ± 0.3 |
+| sha256-iso/residence | 33,944 | 2,333 | 167.8 ± 1.0 | 23.6 ± 0.6 | 211.5 ± 5.5 | 12.5 ± 0.1 |
+| sha256-iso/veteran | 33,944 | 2,054 | 168.3 ± 1.5 | 23.3 ± 0.1 | 211.8 ± 10.1 | 12.5 ± 0.2 |
+| sha512-iso/age | 47,127 | 27,593 | 394.7 ± 3.6 | 46.9 ± 0.3 | 361.6 ± 7.7 | 13.0 ± 0.1 |
+| sha512-iso/rental | 119,499 | 77,205 | 746.4 ± 21.7 | 114.4 ± 4.9 | 772.0 ± 241.0 | 12.9 ± 0.5 |
+| sha512-iso/residence | 47,246 | 27,584 | 380.2 ± 3.5 | 44.9 ± 1.0 | 309.5 ± 5.3 | 12.5 ± 0.1 |
+| sha512-iso/veteran | 46,790 | 27,304 | 378.6 ± 8.3 | 44.4 ± 0.2 | 308.1 ± 11.2 | 12.4 ± 0.1 |
+| poseidon-iso/age | 14,592 | 4,638 | 228.2 ± 5.1 | 23.5 ± 0.4 | 151.5 ± 11.4 | 12.6 ± 0.4 |
+| poseidon-iso/rental | 30,758 | 14,357 | 258.0 ± 6.7 | 35.0 ± 0.2 | 225.2 ± 10.0 | 12.5 ± 0.1 |
+| poseidon-iso/residence | 14,685 | 4,628 | 225.0 ± 3.1 | 22.9 ± 0.1 | 139.8 ± 0.6 | 12.3 ± 0.1 |
+| poseidon-iso/veteran | 14,256 | 4,349 | 223.9 ± 1.5 | 22.8 ± 0.1 | 138.9 ± 1.0 | 12.3 ± 0.1 |
+| longfellow/age | 332,638 | 41,298 | 367.2 ± 1.4 | 291.5 ± 4.4 | 1768.6 ± 38.1 | 14.1 ± 0.5 |
+| longfellow/rental | 373,416 | 53,222 | 405.4 ± 3.6 | 322.2 ± 5.2 | 1916.1 ± 27.2 | 14.2 ± 0.6 |
+| longfellow/residence | 332,581 | 41,288 | 369.7 ± 6.8 | 290.3 ± 4.0 | 1752.5 ± 28.8 | 14.3 ± 0.7 |
+| longfellow/veteran | 332,333 | 41,032 | 366.7 ± 1.7 | 289.4 ± 0.5 | 1758.5 ± 36.2 | 13.9 ± 0.6 |
+| vega/age | 264,766 | 15,889 | 201.1 ± 1.7 | 194.9 ± 1.2 | 1392.2 ± 16.5 | 12.9 ± 0.1 |
+| vega/rental | 316,365 | 31,696 | 245.9 ± 8.3 | 232.6 ± 5.6 | 1637.1 ± 58.0 | 13.1 ± 0.2 |
+| vega/residence | 264,809 | 15,973 | 202.0 ± 7.1 | 195.6 ± 3.7 | 1414.1 ± 57.2 | 13.1 ± 0.6 |
+| vega/veteran | 264,530 | 15,694 | 199.8 ± 1.4 | 194.8 ± 1.0 | 1377.7 ± 11.7 | 13.1 ± 0.4 |
 
 ## Every variant vs base (the cost of authentication)
 
 | Comparison | Scenario | Gates (ref) | Gates | Gates ratio | Prove ms (ref) | Prove ms | Prove ratio |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| sha256-iso vs base | age | 3,199 | 19,497 | 6.09x | 96 | 353 | 3.68x |
-| sha256-iso vs base | rental | 17,410 | 68,817 | 3.95x | 240 | 674 | 2.81x |
-| sha256-iso vs base | residence | 3,426 | 19,791 | 5.78x | 94 | 340 | 3.61x |
-| sha256-iso vs base | veteran | 2,934 | 19,143 | 6.52x | 92 | 335 | 3.64x |
-| sha512-iso vs base | age | 3,199 | 137,439 | 42.96x | 96 | 1592 | 16.58x |
-| sha512-iso vs base | rental | 17,410 | 348,490 | 20.02x | 240 | 5237 | 21.82x |
-| sha512-iso vs base | residence | 3,426 | 137,761 | 40.21x | 94 | 1575 | 16.71x |
-| sha512-iso vs base | veteran | 2,934 | 137,087 | 46.72x | 92 | 1773 | 19.27x |
-| poseidon-iso vs base | age | 3,199 | 15,230 | 4.76x | 96 | 225 | 2.35x |
-| poseidon-iso vs base | rental | 17,410 | 38,149 | 2.19x | 240 | 462 | 1.92x |
-| poseidon-iso vs base | residence | 3,426 | 15,525 | 4.53x | 94 | 224 | 2.38x |
-| poseidon-iso vs base | veteran | 2,934 | 14,877 | 5.07x | 92 | 221 | 2.40x |
-| longfellow vs base | age | 3,199 | 446,889 | 139.70x | 96 | 3239 | 33.74x |
-| longfellow vs base | rental | 17,410 | 492,901 | 28.31x | 240 | 3669 | 15.28x |
-| longfellow vs base | residence | 3,426 | 446,862 | 130.43x | 94 | 3285 | 34.86x |
-| longfellow vs base | veteran | 2,934 | 446,588 | 152.21x | 92 | 3341 | 36.32x |
-| vega vs base | age | 3,199 | 317,541 | 99.26x | 96 | 2433 | 25.35x |
-| vega vs base | rental | 17,410 | 376,970 | 21.65x | 240 | 2705 | 11.27x |
-| vega vs base | residence | 3,426 | 317,945 | 92.80x | 94 | 2422 | 25.70x |
-| vega vs base | veteran | 2,934 | 317,272 | 108.14x | 92 | 2411 | 26.21x |
+| sha256-iso vs base | age | 3,222 | 33,944 | 10.54x | 55 | 248 | 4.50x |
+| sha256-iso vs base | rental | 13,605 | 61,824 | 4.54x | 119 | 388 | 3.27x |
+| sha256-iso vs base | residence | 3,269 | 33,944 | 10.38x | 55 | 211 | 3.84x |
+| sha256-iso vs base | veteran | 2,935 | 33,944 | 11.57x | 53 | 212 | 3.97x |
+| sha512-iso vs base | age | 3,222 | 47,127 | 14.63x | 55 | 362 | 6.56x |
+| sha512-iso vs base | rental | 13,605 | 119,499 | 8.78x | 119 | 772 | 6.50x |
+| sha512-iso vs base | residence | 3,269 | 47,246 | 14.45x | 55 | 309 | 5.62x |
+| sha512-iso vs base | veteran | 2,935 | 46,790 | 15.94x | 53 | 308 | 5.78x |
+| poseidon-iso vs base | age | 3,222 | 14,592 | 4.53x | 55 | 152 | 2.75x |
+| poseidon-iso vs base | rental | 13,605 | 30,758 | 2.26x | 119 | 225 | 1.90x |
+| poseidon-iso vs base | residence | 3,269 | 14,685 | 4.49x | 55 | 140 | 2.54x |
+| poseidon-iso vs base | veteran | 2,935 | 14,256 | 4.86x | 53 | 139 | 2.61x |
+| longfellow vs base | age | 3,222 | 332,638 | 103.24x | 55 | 1769 | 32.10x |
+| longfellow vs base | rental | 13,605 | 373,416 | 27.45x | 119 | 1916 | 16.14x |
+| longfellow vs base | residence | 3,269 | 332,581 | 101.74x | 55 | 1753 | 31.83x |
+| longfellow vs base | veteran | 2,935 | 332,333 | 113.23x | 53 | 1758 | 32.97x |
+| vega vs base | age | 3,222 | 264,766 | 82.17x | 55 | 1392 | 25.27x |
+| vega vs base | rental | 13,605 | 316,365 | 23.25x | 119 | 1637 | 13.79x |
+| vega vs base | residence | 3,269 | 264,809 | 81.01x | 55 | 1414 | 25.68x |
+| vega vs base | veteran | 2,935 | 264,530 | 90.13x | 53 | 1378 | 25.83x |
 
 ## Longfellow vs the ISO-compliant digests
 
 | Comparison | Scenario | Gates (ref) | Gates | Gates ratio | Prove ms (ref) | Prove ms | Prove ratio |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| longfellow vs sha256-iso | age | 19,497 | 446,889 | 22.92x | 353 | 3239 | 9.17x |
-| longfellow vs sha256-iso | rental | 68,817 | 492,901 | 7.16x | 674 | 3669 | 5.45x |
-| longfellow vs sha256-iso | residence | 19,791 | 446,862 | 22.58x | 340 | 3285 | 9.66x |
-| longfellow vs sha256-iso | veteran | 19,143 | 446,588 | 23.33x | 335 | 3341 | 9.99x |
-| longfellow vs sha512-iso | age | 137,439 | 446,889 | 3.25x | 1592 | 3239 | 2.03x |
-| longfellow vs sha512-iso | rental | 348,490 | 492,901 | 1.41x | 5237 | 3669 | 0.70x |
-| longfellow vs sha512-iso | residence | 137,761 | 446,862 | 3.24x | 1575 | 3285 | 2.09x |
-| longfellow vs sha512-iso | veteran | 137,087 | 446,588 | 3.26x | 1773 | 3341 | 1.89x |
+| longfellow vs sha256-iso | age | 33,944 | 332,638 | 9.80x | 248 | 1769 | 7.14x |
+| longfellow vs sha256-iso | rental | 61,824 | 373,416 | 6.04x | 388 | 1916 | 4.94x |
+| longfellow vs sha256-iso | residence | 33,944 | 332,581 | 9.80x | 211 | 1753 | 8.29x |
+| longfellow vs sha256-iso | veteran | 33,944 | 332,333 | 9.79x | 212 | 1758 | 8.30x |
+| longfellow vs sha512-iso | age | 47,127 | 332,638 | 7.06x | 362 | 1769 | 4.89x |
+| longfellow vs sha512-iso | rental | 119,499 | 373,416 | 3.12x | 772 | 1916 | 2.48x |
+| longfellow vs sha512-iso | residence | 47,246 | 332,581 | 7.04x | 309 | 1753 | 5.66x |
+| longfellow vs sha512-iso | veteran | 46,790 | 332,333 | 7.10x | 308 | 1758 | 5.71x |
 
 ## VegaSC vs Longfellow and sha256-iso
 
 | Comparison | Scenario | Gates (ref) | Gates | Gates ratio | Prove ms (ref) | Prove ms | Prove ratio |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| vega vs longfellow | age | 446,889 | 317,541 | 0.71x | 3239 | 2433 | 0.75x |
-| vega vs longfellow | rental | 492,901 | 376,970 | 0.76x | 3669 | 2705 | 0.74x |
-| vega vs longfellow | residence | 446,862 | 317,945 | 0.71x | 3285 | 2422 | 0.74x |
-| vega vs longfellow | veteran | 446,588 | 317,272 | 0.71x | 3341 | 2411 | 0.72x |
-| vega vs sha256-iso | age | 19,497 | 317,541 | 16.29x | 353 | 2433 | 6.89x |
-| vega vs sha256-iso | rental | 68,817 | 376,970 | 5.48x | 674 | 2705 | 4.02x |
-| vega vs sha256-iso | residence | 19,791 | 317,945 | 16.07x | 340 | 2422 | 7.12x |
-| vega vs sha256-iso | veteran | 19,143 | 317,272 | 16.57x | 335 | 2411 | 7.21x |
+| vega vs longfellow | age | 332,638 | 264,766 | 0.80x | 1769 | 1392 | 0.79x |
+| vega vs longfellow | rental | 373,416 | 316,365 | 0.85x | 1916 | 1637 | 0.85x |
+| vega vs longfellow | residence | 332,581 | 264,809 | 0.80x | 1753 | 1414 | 0.81x |
+| vega vs longfellow | veteran | 332,333 | 264,530 | 0.80x | 1758 | 1378 | 0.78x |
+| vega vs sha256-iso | age | 33,944 | 264,766 | 7.80x | 248 | 1392 | 5.62x |
+| vega vs sha256-iso | rental | 61,824 | 316,365 | 5.12x | 388 | 1637 | 4.22x |
+| vega vs sha256-iso | residence | 33,944 | 264,809 | 7.80x | 211 | 1414 | 6.69x |
+| vega vs sha256-iso | veteran | 33,944 | 264,530 | 7.79x | 212 | 1378 | 6.50x |

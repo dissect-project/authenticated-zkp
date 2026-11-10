@@ -284,8 +284,11 @@ def poseidon(item):
             work = Path(tmp) / "hasher"
             (work / "Prover.toml").write_text(f"item = {pad(item, 992)}\n")
             res = subprocess.run(["nargo", "execute"], cwd=work, capture_output=True, text=True)
-            m = re.search(r"Circuit output: Field\((-?\d+)\)", res.stdout + res.stderr)
+            # nargo 1.0 prints the output in hex (0x...), earlier versions as Field(<decimal>)
+            out = res.stdout + res.stderr
+            m = re.search(r"Circuit output: (?:Field\((-?\d+)\)|(0x[0-9a-fA-F]+))", out)
             if not m:
-                raise SystemExit(f"nargo execute failed in hasher:\n{res.stdout}{res.stderr}")
-            _poseidon_cache[item] = (int(m.group(1)) % BN254_P).to_bytes(32, "big")
+                raise SystemExit(f"nargo execute failed in hasher:\n{out}")
+            value = int(m.group(1)) if m.group(1) else int(m.group(2), 16)
+            _poseidon_cache[item] = (value % BN254_P).to_bytes(32, "big")
     return _poseidon_cache[item]

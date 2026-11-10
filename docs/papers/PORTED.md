@@ -15,7 +15,7 @@ check the paper's circuit makes. It does not reproduce the paper's proof system.
 compiled to one Noir circuit and proven with UltraHonk (Barretenberg). Differences in gates
 between variants therefore come from the relations alone. Proving time also depends on how Noir
 compiles each relation (black-box functions or Noir code) and on the power of two the circuit is
-padded to; `tests/proving-time.md` explains both.
+padded to.
 
 The ports share the following with the other ISO variants:
 

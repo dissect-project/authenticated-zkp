@@ -7,8 +7,8 @@ all run on the same credentials (../credentials). Every variant is compared with
 of authentication), longfellow with the ISO-compliant digests (sha256-iso and sha512-iso), and vega
 with longfellow and sha256-iso. For each circuit it reports the number of gates (bb gates) and the
 average time to generate the witness (nargo execute), to build the circuit from the ACIR
-bytecode (bb gates), to generate the proof (bb prove, which includes building the circuit) and to
-verify it (bb verify), on holder1's inputs (Prover.toml). The circuits are copied to a temporary
+bytecode (bb gates), to generate the zero-knowledge proof (bb prove, which includes building the
+circuit) and to verify it (bb verify), on holder1's inputs (Prover.toml). The circuits are copied to a temporary
 directory, so the target/ folders in the repository are left untouched.
 
 Writes the raw measurements to tests/comparison-results.json and the report to
@@ -47,6 +47,9 @@ VARIANT_DIR = {
 BASE_PAIRS = [(v, "base") for v in VARIANTS[1:]]
 VARIANT_LABEL = {"base": "base (predicate only)"}
 RESULTS_JSON = ROOT / "tests" / "comparison-results.json"
+# Barretenberg's verifier target: UltraHonk with zero knowledge and Poseidon2 transcripts (the
+# default of bb 6; the -no-zk targets would drop zero knowledge)
+TARGET = "noir-recursive"
 RESULTS_MD = ROOT / "tests" / "comparison-results.md"
 LONGFELLOW_PAIRS = [("longfellow", "sha256-iso"), ("longfellow", "sha512-iso")]
 VEGA_PAIRS = [("vega", "longfellow"), ("vega", "sha256-iso")]
@@ -98,17 +101,18 @@ def benchmark(src, runs):
 
         run(["nargo", "compile"], work)
         n_gates, opcodes, _ = gates(circuit, work)
-        run(["bb", "write_vk", "-b", str(circuit), "-o", "target"], work)
+        run(["bb", "write_vk", "-b", str(circuit), "-o", "target", "-t", TARGET], work)
 
         times = {"execute": [], "build": [], "prove": [], "verify": []}
         for _ in range(runs):
             times["execute"].append(run(["nargo", "execute"], work)[0])
             times["build"].append(gates(circuit, work)[2])
             times["prove"].append(
-                run(["bb", "prove", "-b", str(circuit), "-w", str(witness), "-o", "target"], work)[0])
+                run(["bb", "prove", "-b", str(circuit), "-w", str(witness), "-k", "target/vk",
+                     "-o", "target", "-t", TARGET], work)[0])
             times["verify"].append(
                 run(["bb", "verify", "-k", "target/vk", "-p", "target/proof",
-                     "-i", "target/public_inputs"], work)[0])
+                     "-i", "target/public_inputs", "-t", TARGET], work)[0])
         return {"gates": n_gates, "opcodes": opcodes, "times": times}
 
 
@@ -171,10 +175,12 @@ def report(data):
             "circuit) for every circuit.",
             "", "## Every circuit", "",
             "Mean ± standard deviation in ms. *Build* is the construction of the circuit from the "
-            "ACIR bytecode (`bb gates`); *Prove* (`bb prove`) includes it. Building grows with the "
-            "number of ACIR opcodes, not only with the gates: SHA-512 has no black box in Noir and "
-            "compiles to many small opcodes, so sha512-iso spends a large share of its proving time "
-            "building the circuit (see `proving-time.md`).", ""]
+            "ACIR bytecode (`bb gates`); *Prove* (`bb prove`) includes it, as a mobile prover "
+            "builds the circuit for every proof. *Gates* is the `circuit_size` of `bb gates`. "
+            "Its meaning depends on the Barretenberg version (bb 6 counts a block of about "
+            "15,300 rows whenever SHA-256 is used, which bb 0.84 did not), so gates are "
+            "comparable only within one toolchain. The prover pads the circuit to a power of "
+            "two, so circuits in the same power of two take similar times.", ""]
     out.append(md_table(
         ["Circuit", "Gates", "ACIR opcodes", "Witness", "Build", "Prove", "Verify"],
         [[k, f"{r['gates']:,}", f"{r['opcodes']:,}", mean_sd(r["times"]["execute"]),

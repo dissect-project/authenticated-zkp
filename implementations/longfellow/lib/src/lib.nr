@@ -219,7 +219,7 @@ pub fn verify_mdoc<let S: u32, let E: u32, let N: u32>(
     );
 
     // 2. Issuer signature over e1 = SHA256(Sig_structure)
-    let e1 = sha256_var(signed, signed_len as u64);
+    let e1 = sha256_var(signed, signed_len);
     assert(
         std::ecdsa_secp256r1::verify_signature(issuer_pk_x, issuer_pk_y, issuer_sig, e1),
         "Issuer signature verification has failed",
@@ -354,7 +354,7 @@ pub fn verify_mdoc<let S: u32, let E: u32, let N: u32>(
     }
     check_at(device_msg, off + tr_len, DA_SUFFIX);
     assert(device_msg_len == off + tr_len + DA_SUFFIX_LEN, "Invalid device Sig_structure length");
-    let e2 = sha256_var(device_msg, device_msg_len as u64);
+    let e2 = sha256_var(device_msg, device_msg_len);
     assert(
         std::ecdsa_secp256r1::verify_signature(dpk_x, dpk_y, device_sig, e2),
         "Device signature verification has failed",
