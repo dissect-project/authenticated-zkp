@@ -1,0 +1,352 @@
+// Noir port of the Longfellow-zk mdoc presentation circuit
+// (Frigo & shelat, "Anonymous Credentials from ECDSA", IACR CiC 3(1), Algorithm 10).
+//
+// verify_mdoc proves, for public (PK_issuer, elementIdentifier, tr, now) and a private CBOR-encoded
+// elementValue, that
+//
+//   e1 = SHA256(Sig_structure(MSO))                       issuer-signed bytes
+//   h2 = MSO[valueDigests][org.iso.18013.5.1][digestID]
+//   h2 = SHA256(IssuerSignedItemBytes(digestID, random, elementIdentifier, elementValue))
+//   (dpk_x, dpk_y) = MSO[deviceKeyInfo][deviceKey][-2, -3]
+//   validFrom < now < validUntil
+//   p256.verify(sig_issuer, e1, PK_issuer)
+//   p256.verify(sig_device, SHA256(tr || hdr), (dpk_x, dpk_y))
+//
+// tr is the CBOR-encoded SessionTranscript and hdr the private COSE framing around it, i.e. the
+// device signs Sig_structure(DeviceAuthenticationBytes) with
+// DeviceAuthentication = ["DeviceAuthentication", tr, docType, DeviceNameSpacesBytes].
+// The predicate on the attribute is left to the caller. The item fields (digestID, random and the
+// elementValue) are received CBOR-encoded and IssuerSignedItemBytes is built and hashed with the
+// same code as the ISO variants (../../iso/lib), so both approaches hash the attribute identically.
+use iso::{decode_uint, MAX_UINT_LEN, RANDOM_CBOR_LEN, sha256_item_digest};
+use sha256::sha256_var;
+
+// 2231 = 35 * 64 - 9 bytes, the largest message that fits in 35 SHA-256 blocks
+// (the MSO bound used in Longfellow's mdoc benchmark).
+pub global MAX_SIGNED_LEN: u32 = 2231;
+// Sig_structure = ["Signature1", h'A10126', h'', bstr(#6.24(bstr(MSO)))]
+// 84 6A "Signature1" 43 A1 01 26 40 59 LL LL D8 18 59 MM MM <MSO>
+global MSO_START: u32 = 25;
+
+pub global DATE_LEN: u32 = 20; // tdate "YYYY-MM-DDTHH:MM:SSZ"
+// now as a CBOR tdate, tag 0 over a 20-byte text string: C0 74 <date>
+pub global NOW_CBOR_LEN: u32 = 2 + DATE_LEN;
+
+// Device-signed Sig_structure = ["Signature1", h'A10126', h'', bstr(DeviceAuthenticationBytes)]
+// 84 6A "Signature1" 43 A1 01 26 40 <bstr head> D8 18 <bstr head> 84 74 "DeviceAuthentication"
+// <tr> 75 "org.iso.18013.5.1.mDL" D8 18 41 A0
+pub global MAX_TR_LEN: u32 = 256;
+global DA_PREFIX_LEN: u32 = 17;
+global DA_TR_OFF: u32 = DA_PREFIX_LEN + 2 + 2 + 2 + 22; // with 1-byte bstr lengths
+global DA_SUFFIX_LEN: u32 = 26;
+pub global MAX_DA_LEN: u32 = DA_TR_OFF + 2 + MAX_TR_LEN + DA_SUFFIX_LEN;
+global DA_ARRAY_HEAD: [u8; 22] = [
+    0x84, 0x74, 0x44, 0x65, 0x76, 0x69, 0x63, 0x65, 0x41, 0x75, 0x74, 0x68, 0x65, 0x6e, 0x74,
+    0x69, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e,
+]; // [ "DeviceAuthentication",
+global DA_SUFFIX: [u8; DA_SUFFIX_LEN] = [
+    0x75, 0x6f, 0x72, 0x67, 0x2e, 0x69, 0x73, 0x6f, 0x2e, 0x31, 0x38, 0x30, 0x31, 0x33, 0x2e, 0x35,
+    0x2e, 0x31, 0x2e, 0x6d, 0x44, 0x4c, // "org.iso.18013.5.1.mDL"
+    0xd8, 0x18, 0x41, 0xa0, // #6.24(bstr({}))
+];
+
+global NAMESPACE: [u8; 18] = [
+    0x71, 0x6f, 0x72, 0x67, 0x2e, 0x69, 0x73, 0x6f, 0x2e, 0x31, 0x38, 0x30, 0x31, 0x33, 0x2e, 0x35,
+    0x2e, 0x31,
+]; // tstr "org.iso.18013.5.1"
+global DEVICE_KEY: [u8; 18] = [
+    0x69, 0x64, 0x65, 0x76, 0x69, 0x63, 0x65, 0x4b, 0x65, 0x79, // tstr "deviceKey"
+    0xa4, 0x01, 0x02, 0x20, 0x01, 0x21, 0x58, 0x20, // {1: 2, -1: 1, -2: bstr(32) ...
+];
+global VALID_FROM: [u8; 12] = [0x69, 0x76, 0x61, 0x6c, 0x69, 0x64, 0x46, 0x72, 0x6f, 0x6d, 0xc0, 0x74];
+global VALID_UNTIL: [u8; 13] =
+    [0x6a, 0x76, 0x61, 0x6c, 0x69, 0x64, 0x55, 0x6e, 0x74, 0x69, 0x6c, 0xc0, 0x74];
+global DOC_TYPE: [u8; 30] = [
+    0x67, 0x64, 0x6f, 0x63, 0x54, 0x79, 0x70, 0x65, // tstr "docType"
+    0x75, 0x6f, 0x72, 0x67, 0x2e, 0x69, 0x73, 0x6f, 0x2e, 0x31, 0x38, 0x30, 0x31, 0x33, 0x2e, 0x35,
+    0x2e, 0x31, 0x2e, 0x6d, 0x44, 0x4c, // tstr "org.iso.18013.5.1.mDL"
+];
+global DIGEST_ALG: [u8; 24] = [
+    0x6f, 0x64, 0x69, 0x67, 0x65, 0x73, 0x74, 0x41, 0x6c, 0x67, 0x6f, 0x72, 0x69, 0x74, 0x68, 0x6d,
+    0x67, 0x53, 0x48, 0x41, 0x2d, 0x32, 0x35, 0x36,
+]; // "digestAlgorithm": "SHA-256"
+
+// Private witness shared by all scenarios
+pub struct Mdoc {
+    pub signed: [u8; MAX_SIGNED_LEN], // issuer-signed Sig_structure, zero-padded
+    pub signed_len: u32,
+    pub issuer_sig: [u8; 64],
+    pub digest_id_cbor: [u8; MAX_UINT_LEN], // digestID as encoded in the item, zero-padded
+    pub random_cbor: [u8; RANDOM_CBOR_LEN], // random as encoded in the item
+    pub ns_off: u32, // CBOR offsets of the MSO fields, see generate.py
+    pub digest_off: u32,
+    pub dk_off: u32,
+    pub vf_off: u32,
+    pub vu_off: u32,
+    pub dt_off: u32,
+    pub da_off: u32,
+    pub device_sig: [u8; 64],
+    pub device_msg: [u8; MAX_DA_LEN], // tr framed by hdr, zero-padded
+    pub device_msg_len: u32,
+}
+
+// Asserts that `pattern` occurs at `buf[off..]`.
+fn check_at<let N: u32, let M: u32>(buf: [u8; N], off: u32, pattern: [u8; M]) {
+    for k in 0..M {
+        assert(buf[off + k] == pattern[k], "MSO field does not match");
+    }
+}
+
+fn read_at<let N: u32, let M: u32>(buf: [u8; N], off: u32) -> [u8; M] {
+    let mut out = [0; M];
+    for k in 0..M {
+        out[k] = buf[off + k];
+    }
+    out
+}
+
+// Checks the head of a bstr of length `len` (< 65536) at `buf[off..]`, returns its size.
+fn check_bstr_head<let N: u32>(buf: [u8; N], off: u32, len: u32) -> u32 {
+    if len < 256 {
+        assert(buf[off] == 0x58, "Invalid bstr length");
+        assert(buf[off + 1] as u32 == len, "Invalid bstr length");
+        2
+    } else {
+        assert(buf[off] == 0x59, "Invalid bstr length");
+        assert((buf[off + 1] as u32) * 256 + (buf[off + 2] as u32) == len, "Invalid bstr length");
+        3
+    }
+}
+
+// Decodes a CBOR tdate, tag 0 over a 20-byte text string: C0 74 <YYYY-MM-DDTHH:MM:SSZ>
+pub fn decode_tdate(cbor: [u8; NOW_CBOR_LEN]) -> [u8; DATE_LEN] {
+    assert((cbor[0] == 0xc0) & (cbor[1] == 0x74), "Not a CBOR tdate");
+    read_at(cbor, 2)
+}
+
+// YYYY-MM-DDTHH:MM:SSZ -> YYYYMMDDHHMMSS
+fn tdate_to_u64(d: [u8; DATE_LEN]) -> u64 {
+    let digits = [0, 1, 2, 3, 5, 6, 8, 9, 11, 12, 14, 15, 17, 18];
+    let mut v: u64 = 0;
+    for k in 0..14 {
+        let c = d[digits[k]];
+        assert((c >= 0x30) & (c <= 0x39), "Invalid tdate");
+        v = v * 10 + ((c - 0x30) as u64);
+    }
+    v
+}
+
+// Per-byte CBOR head tables, used as ROM lookups by the tokenizer.
+//   base[b]  token length when it does not depend on the following bytes,
+//            0 if b cannot start a token (definite lengths only, as mandated for mdoc)
+//   ext[b]   1 (resp. 2) if b is a byte/text string head with a 1-byte (resp. 2-byte) length
+//   tstr[b]  1 if b is a text string head
+fn cbor_tables() -> ([Field; 256], [Field; 256], [Field; 256]) {
+    let mut base = [0; 256];
+    let mut ext = [0; 256];
+    let mut tstr = [0; 256];
+    for b in 0..256 {
+        let major = b / 32;
+        let ai = b % 32;
+        let is_str = (major == 2) | (major == 3);
+        let head = if ai < 24 {
+            1
+        } else if ai == 24 {
+            2
+        } else if ai == 25 {
+            3
+        } else if ai == 26 {
+            5
+        } else {
+            9
+        };
+        if (ai < 26) | (!is_str & (ai < 28)) {
+            base[b] = head as Field;
+            if is_str & (ai < 24) {
+                base[b] = (1 + ai) as Field;
+            }
+            if is_str & (ai == 24) {
+                ext[b] = 1;
+            }
+            if is_str & (ai == 25) {
+                ext[b] = 2;
+            }
+        }
+        if major == 3 {
+            tstr[b] = 1;
+        }
+    }
+    (base, ext, tstr)
+}
+
+pub fn verify_mdoc<let E: u32, let V: u32>(
+    issuer_pk_x: [u8; 32],
+    issuer_pk_y: [u8; 32],
+    tr: [u8; MAX_TR_LEN],
+    tr_len: u32,
+    now_cbor: [u8; NOW_CBOR_LEN],
+    element_id: [u8; E],
+    value: [u8; V], // CBOR-encoded elementValue, zero-padded
+    value_len: u32,
+    mdoc: Mdoc,
+) {
+    let Mdoc {
+        signed, signed_len, issuer_sig, digest_id_cbor, random_cbor, ns_off, digest_off, dk_off,
+        vf_off, vu_off, dt_off, da_off, device_sig, device_msg, device_msg_len,
+    } = mdoc;
+    let now = decode_tdate(now_cbor);
+    // 1. Sig_structure prefix and MSO length fields
+    assert(signed_len <= MAX_SIGNED_LEN, "Signed MSO exceeds maximum size");
+    assert(signed_len >= MSO_START + 256, "Signed MSO too small");
+    let prefix: [u8; 18] = [
+        0x84, 0x6a, 0x53, 0x69, 0x67, 0x6e, 0x61, 0x74, 0x75, 0x72, 0x65, 0x31, 0x43, 0xa1, 0x01,
+        0x26, 0x40, 0x59,
+    ];
+    for k in 0..18 {
+        assert(signed[k] == prefix[k], "Invalid Sig_structure");
+    }
+    assert(signed[20] == 0xd8, "Invalid Sig_structure");
+    assert(signed[21] == 0x18, "Invalid Sig_structure");
+    assert(signed[22] == 0x59, "Invalid Sig_structure");
+    let len_field = signed_len as Field;
+    assert(
+        (signed[18] as Field) * 256 + (signed[19] as Field) == len_field - 20,
+        "Invalid payload length",
+    );
+    assert(
+        (signed[23] as Field) * 256 + (signed[24] as Field) == len_field - MSO_START as Field,
+        "Invalid MSO length",
+    );
+
+    // 2. Issuer signature over e1 = SHA256(Sig_structure)
+    let e1 = sha256_var(signed, signed_len as u64);
+    assert(
+        std::ecdsa_secp256r1::verify_signature(issuer_pk_x, issuer_pk_y, issuer_sig, e1),
+        "Issuer signature verification has failed",
+    );
+
+    // 3. CBOR tokenization of the MSO: hdr[i] = 1 iff a token starts at byte i,
+    //    tcnt[i] = number of text-string tokens starting in [MSO_START, i).
+    let (base, ext, tstr) = cbor_tables();
+    let mut buf: [u8; MAX_SIGNED_LEN + 2] = [0; MAX_SIGNED_LEN + 2];
+    for i in 0..MAX_SIGNED_LEN {
+        buf[i] = signed[i];
+    }
+    let mut hdr: [Field; MAX_SIGNED_LEN + 1] = [0; MAX_SIGNED_LEN + 1];
+    let mut tcnt: [Field; MAX_SIGNED_LEN + 1] = [0; MAX_SIGNED_LEN + 1];
+    let mut rem: Field = 1; // bytes left in the current token, a new one starts when it reaches 1
+    let mut cnt: Field = 0;
+    for i in MSO_START..MAX_SIGNED_LEN {
+        let b = buf[i] as u32;
+        let b1 = buf[i + 1] as Field;
+        let b2 = buf[i + 2] as Field;
+        let is_hdr = rem == 1;
+        let len0 = base[b];
+        if is_hdr {
+            assert(len0 != 0, "Invalid CBOR token");
+        }
+        // ext = 1: + b1, ext = 2: + 256 * b1 + b2 (= 2 * b1 + 254 * b1 + b2)
+        let e = ext[b];
+        let len = len0 + e * b1 + e * (e - 1) * (254 * b1 + b2) / 2;
+        hdr[i] = is_hdr as Field;
+        tcnt[i] = cnt;
+        cnt += hdr[i] * tstr[b];
+        rem = if is_hdr { len } else { rem - 1 };
+    }
+    hdr[MAX_SIGNED_LEN] = (rem == 1) as Field;
+    tcnt[MAX_SIGNED_LEN] = cnt;
+    // the token stream must end exactly at the end of the MSO
+    assert(hdr[signed_len] == 1, "MSO is not well-formed CBOR");
+    // Every field read below must lie within the issuer-signed bytes: signed[signed_len..] is
+    // private, unhashed witness, so a field there would not be covered by the issuer signature.
+    // (hdr[i] is 0 before MSO_START, so the hdr checks also bound the offsets from below.)
+    let field_end = |off: u32, len: u32| {
+        assert(off + len <= signed_len, "MSO field outside the signed bytes");
+    };
+
+    // 4. h2 = MSO[valueDigests][org.iso.18013.5.1][digestID]
+    assert(hdr[ns_off] == 1, "Namespace is not a CBOR token");
+    field_end(ns_off, NAMESPACE.len() + 1);
+    check_at(signed, ns_off, NAMESPACE);
+    let map_off = ns_off + 18;
+    assert(signed[map_off] >> 5 == 5, "Namespace value is not a map");
+    // no text-string token between the namespace key and the digest entry, i.e.
+    // the entry lies within this namespace's digest map
+    assert(map_off < digest_off, "Digest is outside the namespace");
+    assert(tcnt[digest_off] == tcnt[map_off], "Digest is outside the namespace");
+    assert(hdr[digest_off] == 1, "Digest key is not a CBOR token");
+    // the entry's key must be the item's digestID; compare values, since the MSO and the item may
+    // encode it differently
+    let key: [u8; MAX_UINT_LEN] = read_at(signed, digest_off);
+    let (id_mso, id_len, _) = decode_uint(key);
+    let (id_item, _, _) = decode_uint(digest_id_cbor);
+    assert(id_mso == id_item, "digestID mismatch");
+    field_end(digest_off, id_len + 2 + 32);
+    assert(signed[digest_off + id_len] == 0x58, "Digest is not a 32-byte bstr");
+    assert(signed[digest_off + id_len + 1] == 0x20, "Digest is not a 32-byte bstr");
+    let h2: [u8; 32] = read_at(signed, digest_off + id_len + 2);
+
+    // 5. h2 = SHA256(IssuerSignedItemBytes), built from the CBOR-encoded fields
+    assert(value_len <= V, "elementValue exceeds maximum size");
+    let item_hash = sha256_item_digest(digest_id_cbor, random_cbor, element_id, value, value_len);
+    assert(item_hash == h2, "Attribute digest verification has failed");
+
+    // 6. Device key, docType and digest algorithm
+    assert(hdr[dk_off] == 1, "deviceKey is not a CBOR token");
+    field_end(dk_off, DEVICE_KEY.len() + 32 + 3 + 32);
+    check_at(signed, dk_off, DEVICE_KEY);
+    let dpk_x: [u8; 32] = read_at(signed, dk_off + 18);
+    assert(signed[dk_off + 50] == 0x22, "Invalid deviceKey");
+    assert(signed[dk_off + 51] == 0x58, "Invalid deviceKey");
+    assert(signed[dk_off + 52] == 0x20, "Invalid deviceKey");
+    let dpk_y: [u8; 32] = read_at(signed, dk_off + 53);
+    assert(hdr[dt_off] == 1, "docType is not a CBOR token");
+    field_end(dt_off, DOC_TYPE.len());
+    check_at(signed, dt_off, DOC_TYPE);
+    assert(hdr[da_off] == 1, "digestAlgorithm is not a CBOR token");
+    field_end(da_off, DIGEST_ALG.len());
+    check_at(signed, da_off, DIGEST_ALG);
+
+    // 7. validFrom < now < validUntil
+    assert(hdr[vf_off] == 1, "validFrom is not a CBOR token");
+    field_end(vf_off, VALID_FROM.len() + DATE_LEN);
+    check_at(signed, vf_off, VALID_FROM);
+    assert(hdr[vu_off] == 1, "validUntil is not a CBOR token");
+    field_end(vu_off, VALID_UNTIL.len() + DATE_LEN);
+    check_at(signed, vu_off, VALID_UNTIL);
+    let t_from = tdate_to_u64(read_at(signed, vf_off + 12));
+    let t_until = tdate_to_u64(read_at(signed, vu_off + 13));
+    let t_now = tdate_to_u64(now);
+    assert(t_from < t_now, "Credential is not yet valid");
+    assert(t_now < t_until, "Credential has expired");
+
+    // 8. Device signature over SHA256(tr || hdr) under the hidden device key: device_msg must be
+    //    the device-signed Sig_structure built around the public tr
+    assert(tr_len <= MAX_TR_LEN, "SessionTranscript exceeds maximum size");
+    let da_len = DA_ARRAY_HEAD.len() + tr_len + DA_SUFFIX_LEN;
+    let dab_len = 2 + (if da_len < 256 { 2 } else { 3 }) + da_len;
+    for k in 0..DA_PREFIX_LEN {
+        assert(device_msg[k] == prefix[k], "Invalid device Sig_structure");
+    }
+    let mut off = DA_PREFIX_LEN;
+    off += check_bstr_head(device_msg, off, dab_len);
+    assert(device_msg[off] == 0xd8, "Invalid DeviceAuthenticationBytes");
+    assert(device_msg[off + 1] == 0x18, "Invalid DeviceAuthenticationBytes");
+    off += 2;
+    off += check_bstr_head(device_msg, off, da_len);
+    check_at(device_msg, off, DA_ARRAY_HEAD);
+    off += DA_ARRAY_HEAD.len();
+    for k in 0..MAX_TR_LEN {
+        if k < tr_len {
+            assert(device_msg[off + k] == tr[k], "SessionTranscript mismatch");
+        }
+    }
+    check_at(device_msg, off + tr_len, DA_SUFFIX);
+    assert(device_msg_len == off + tr_len + DA_SUFFIX_LEN, "Invalid device Sig_structure length");
+    let e2 = sha256_var(device_msg, device_msg_len as u64);
+    assert(
+        std::ecdsa_secp256r1::verify_signature(dpk_x, dpk_y, device_sig, e2),
+        "Device signature verification has failed",
+    );
+
+}
