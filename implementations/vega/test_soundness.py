@@ -236,9 +236,9 @@ def forged_device_key(nested):
 
 def execute(variant, inputs, order):
     with tempfile.TemporaryDirectory() as tmp:
-        # mirror implementations/: int/ depends on ../lib, which depends on ../../iso/lib
+        # mirror implementations/: int/ depends on ../lib, which depends on ../../iso/common/lib
         root = Path(tmp)
-        for d in [f"{variant}/lib", f"{variant}/int", "iso/lib"]:
+        for d in [f"{variant}/lib", f"{variant}/int", "iso/common/lib"]:
             shutil.copytree(IMPLEMENTATIONS / d, root / d, ignore=shutil.ignore_patterns("target"))
         work = root / variant / "int"
         (work / "Prover.toml").write_text(lf.to_toml(inputs, order))

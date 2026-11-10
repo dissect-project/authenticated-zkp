@@ -21,7 +21,7 @@
 //     9052), as in the Longfellow port, so both ports hash the same bytes;
 //   - the digest entry is extracted with the lookup protocol of Figure 7, its prefix being the
 //     CBOR digestID followed by the bstr(32) head 58 20; the namespace is not checked;
-//   - the item is built from its CBOR-encoded fields with ../../iso/lib, as in every other variant,
+//   - the item is built from its CBOR-encoded fields with ../../iso/common/lib, as in every other variant,
 //     and hashed with SHA256_SC;
 //   - signatures are verified with Noir's ECDSA P-256 black box: the (r, s^-1) form of Figure 6
 //     only pays off when the circuit field is the P-256 base field (T-256).

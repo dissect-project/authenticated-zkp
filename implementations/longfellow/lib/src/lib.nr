@@ -21,7 +21,7 @@
 // the map that is the value of the top-level key validityInfo).
 // The predicate on the attribute is left to the caller. The item fields (digestID, random and the
 // elementValue) are received CBOR-encoded and IssuerSignedItemBytes is built and hashed with the
-// same code as the ISO variants (../../iso/lib), so both approaches hash the attribute identically.
+// same code as the ISO variants (../../iso/common/lib), so both approaches hash the attribute identically.
 use iso::{decode_uint, MAX_UINT_LEN, RANDOM_CBOR_LEN, sha256_item_digest};
 use sha256::sha256_var;
 

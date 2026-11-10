@@ -44,7 +44,7 @@ _spec.loader.exec_module(lf)
 MSO_BLOCKS = 35
 MAX_UINT_LEN = 9
 DK_LEN, VU_LEN, DG_LEN = 85, 33, MAX_UINT_LEN + 2 + 32
-# item size bound, as in ../../iso/lib: HEAD_LEN + MAX_UINT_LEN + RANDOM_PART_LEN + 1 + E +
+# item size bound, as in ../../iso/common/lib: HEAD_LEN + MAX_UINT_LEN + RANDOM_PART_LEN + 1 + E +
 # VALUE_KEY_LEN + V + 1 = 80 + E + V bytes (with 16-byte random)
 ITEM_FIXED = 80
 

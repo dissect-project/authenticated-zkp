@@ -39,7 +39,7 @@ Private inputs:
 | `e1 = SHA256(MSO)`, `p256.verify(sig_issuer, e1, PK_issuer)` | SHA-256 over the COSE `Sig_structure` of the MSO (at most 2231 bytes, 35 blocks) and the issuer's signature |
 | MSO parsing (§4.3) | Every token of the MSO with its parent container and key/value position; the MSO must be one CBOR map ending at the signed length |
 | `h2 = MSO[valueDigests][org.iso.18013.5.1][digestID]` | The namespace is a key of `MSO[valueDigests]`. The digest entry is a key of that namespace's map, its key is the item's `digestID`, and its value is a 32-byte bstr. |
-| `h2 = SHA256(item)` | `IssuerSignedItemBytes(digestID, random, elementIdentifier, elementValue)`, built and hashed with `../../iso/lib` |
+| `h2 = SHA256(item)` | `IssuerSignedItemBytes(digestID, random, elementIdentifier, elementValue)`, built and hashed with `../../iso/common/lib` |
 | `(pk_dx, pk_dy) = MSO[deviceKeyInfo][deviceKey][-2, -3]` | `deviceKey` is a key of `MSO[deviceKeyInfo]`; the coordinates are read from its COSE key |
 | `validFrom < now < validUntil` | Both are keys of `MSO[validityInfo]` |
 | `p256.verify(sig_device, H(tr ‖ hdr), (pk_dx, pk_dy))` | The device-signed `Sig_structure(DeviceAuthenticationBytes)` is rebuilt around the public `tr` |

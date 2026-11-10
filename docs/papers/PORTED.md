@@ -17,7 +17,7 @@ proving time between variants therefore come from the relations alone.
 
 The ports share the following with the other ISO variants:
 
-- **Item.** `IssuerSignedItemBytes` is built and hashed by `implementations/iso/lib`, so every
+- **Item.** `IssuerSignedItemBytes` is built and hashed by `implementations/iso/common/lib`, so every
   variant hashes the attribute identically.
 - **Predicates.** All variants use the same four scenarios: `int`, `age`, `nationality` and `str`.
   The value is private and only the predicate result is revealed.

@@ -5,4 +5,4 @@ authors = [""]
 
 [dependencies]
 vega = { path = "../lib" }
-iso = { path = "../../iso/lib" }
+iso = { path = "../../iso/common/lib" }

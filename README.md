@@ -6,6 +6,9 @@ A proof of concept exploring **authenticated witness binding for Zero-Knowledge 
 
 Five variations are implemented, differing in the hash function used to bind the private attribute:
 
+Variants are named as in the benchmark (`tests/comparison.py`); the directory of each is in the
+project structure below (e.g. `sha256-iso` is `implementations/iso/sha256`).
+
 | Variation | Hash Function | Notes |
 |-----------|--------------|-------|
 | `base` | None | No hash binding; attribute is not verified against an external commitment |
@@ -44,23 +47,25 @@ authenticated-zkp/
 │   │   └── NOT_PORTED.md     # Why Crescent and VegaMC are not ported
 │   └── testing-app.png       # Screenshot of the testing application
 ├── implementations/
-│   ├── base/                 # No hash authentication
-│   ├── sha256/               # SHA-256 hash version
-│   ├── sha512/               # SHA-512 hash version
-│   ├── poseidon/             # Poseidon hash version
-│   │   └── age/  int/  nationality/  str/  varstr/
+│   ├── base/                 # Original variants: the attribute is hashed on its own
+│   │   ├── none/             # No hash authentication (variant base)
+│   │   ├── sha256/           # SHA-256 hash version
+│   │   ├── sha512/           # SHA-512 hash version
+│   │   └── poseidon/         # Poseidon hash version
+│   │       └── age/  int/  nationality/  str/  varstr/
 │   │
-│   ├── base-iso/             # ISO/IEC 18013-5 inputs (CBOR), no hash authentication
-│   ├── sha256-iso/           # ISO/IEC 18013-5: SHA-256 MSO digest of IssuerSignedItemBytes
-│   ├── sha512-iso/           # ISO/IEC 18013-5: SHA-512 MSO digest of IssuerSignedItemBytes
-│   ├── poseidon-iso/         # Same item hashed with Poseidon (comparison only, not ISO)
-│   │   └── age/  int/  nationality/  str/
-│   ├── iso/                  # Shared code of the -iso variants (see iso/README.md)
-│   │   ├── lib/              # Noir library: CBOR decoding, IssuerSignedItemBytes, SHA-256
-│   │   ├── sha512/           # Noir library: SHA-512 of the item
-│   │   ├── poseidon/         # Noir library: Poseidon of the item
-│   │   ├── hasher/           # Noir program computing the Poseidon digest for generate.py
-│   │   └── generate.py       # Builds (or reads) an item and writes Prover.toml / Dart inputs
+│   ├── iso/                  # ISO/IEC 18013-5 variants: the MSO digest of IssuerSignedItemBytes
+│   │   ├── none/             # ISO inputs (CBOR), no hash authentication (variant base-iso)
+│   │   ├── sha256/           # SHA-256 digest (variant sha256-iso)
+│   │   ├── sha512/           # SHA-512 digest (variant sha512-iso)
+│   │   ├── poseidon/         # Poseidon digest, comparison only, not ISO (variant poseidon-iso)
+│   │   │   └── age/  int/  nationality/  str/
+│   │   └── common/           # Shared by the ISO variants (lib/ also by longfellow and vega)
+│   │       ├── lib/          # Noir library: CBOR decoding, IssuerSignedItemBytes, SHA-256
+│   │       ├── sha512/       # Noir library: SHA-512 of the item
+│   │       ├── poseidon/     # Noir library: Poseidon of the item
+│   │       ├── hasher/       # Noir program computing the Poseidon digest for generate.py
+│   │       └── generate.py   # Builds (or reads) an item and writes Prover.toml / Dart inputs
 │   │
 │   ├── longfellow/           # Noir port of the Longfellow-zk mdoc circuit (see longfellow/README.md)
 │   │   ├── lib/              # Noir library: SHA-256, in-circuit CBOR parsing of the MSO, signatures
@@ -78,21 +83,23 @@ authenticated-zkp/
 │       ├── src/main.nr       # Noir circuit
 │       ├── Nargo.toml        # Noir package manifest
 │       ├── Prover.toml       # Proof inputs
-│       ├── bytes.sh          # Helper script to compute inputs and hash (original variants)
-│       ├── inputs_*.dart     # Inputs of the four test runs (-iso, longfellow and vega variants)
+│       ├── bytes.sh          # Helper script to compute inputs and hash (base variants)
+│       ├── inputs_*.dart     # Inputs of the four test runs (iso, longfellow and vega variants)
 │       └── target/           # Compiled artifacts and proofs
 │
+├── scenarios/                # Circuits and inputs run by the testing application
+│   ├── primary/              # age, int, nationality, str
+│   ├── varstr/               # varstr-32 to varstr-512
+│   └── 150/                  # varstr-150
+│
+│   Each scenario directory contains:
+│       ├── circuits/         # Compiled circuits
+│       └── inputs/           # Dart inputs
+│
 └── tests/
-    ├── 150/                  # Content for the varstr-150 test
-    ├── primary/              # Content for the primary test
-    ├── varstr/               # Content for the varstr test
     ├── comparison.py         # Benchmarks gates and proving times of every variant
     ├── comparison-results.txt  # Output of comparison.py
-    └── testing-app.apk       # Android application to run the tests
-
-    Each test directory contains:
-        ├── circuits/         # Circuits used
-        └── inputs/           # Inputs used
+    └── testing-app.apk       # Android application to run the scenarios
 ```
 
 ---

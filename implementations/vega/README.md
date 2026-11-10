@@ -64,7 +64,7 @@ plain SHA-256 benchmark, but not the mDL circuit, so these follow the paper and 
   `elementIdentifier` in another namespace.
 - **Item preimage.** The paper hashes a "DOB preimage" without saying how it is tied to
   `birth_date` or how the date is read from it. The item is built from its CBOR-encoded fields with
-  `../../iso/lib`, as in every other variant, which fixes the `elementIdentifier` and the value,
+  `../../iso/common/lib`, as in every other variant, which fixes the `elementIdentifier` and the value,
   and is then hashed with `SHA256_SC`.
 - **Date.** The public date is a CBOR full-date (`D9 03 EC 6A YYYY-MM-DD`), like `birth_date`,
   compared as midnight against `validUntil`.

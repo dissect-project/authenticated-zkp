@@ -141,11 +141,12 @@ def other_digest_id(w):
 def execute(w):
     order = g.PUBLIC + ["y_cbor", "x_cbor"] + g.PRIVATE
     with tempfile.TemporaryDirectory() as tmp:
-        # mirror implementations/: int/ depends on ../lib, which depends on ../../iso/lib
+        # mirror implementations/: int/ depends on ../lib, which depends on ../../iso/common/lib
         root = Path(tmp)
         for d in ["lib", "int"]:
             shutil.copytree(HERE / d, root / "longfellow" / d, ignore=shutil.ignore_patterns("target"))
-        shutil.copytree(HERE.parent / "iso" / "lib", root / "iso" / "lib", ignore=shutil.ignore_patterns("target"))
+        shutil.copytree(HERE.parent / "iso" / "common" / "lib", root / "iso" / "common" / "lib",
+                        ignore=shutil.ignore_patterns("target"))
         work = root / "longfellow" / "int"
         (work / "Prover.toml").write_text(g.to_toml(w, order))
         res = subprocess.run(["nargo", "execute"], cwd=work, capture_output=True, text=True)

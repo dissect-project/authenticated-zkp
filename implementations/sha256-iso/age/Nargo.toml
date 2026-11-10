@@ -1,7 +1,0 @@
-[package]
-name = "age"
-type = "bin"
-authors = [""]
-
-[dependencies]
-iso = { path = "../../iso/lib" }

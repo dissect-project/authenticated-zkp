@@ -30,6 +30,12 @@ IMPLEMENTATIONS = ROOT / "implementations"
 SCENARIOS = ["int", "age", "nationality", "str"]
 VARIANTS = ["sha256", "sha256-iso", "sha512", "sha512-iso", "poseidon", "poseidon-iso",
             "base", "base-iso", "longfellow", "vega"]
+# directory of each variant under implementations/
+VARIANT_DIR = {
+    "sha256": "base/sha256", "sha512": "base/sha512", "poseidon": "base/poseidon", "base": "base/none",
+    "sha256-iso": "iso/sha256", "sha512-iso": "iso/sha512", "poseidon-iso": "iso/poseidon",
+    "base-iso": "iso/none", "longfellow": "longfellow", "vega": "vega",
+}
 # Comparison tables printed at the end, as (variant, reference) pairs. poseidon-iso uses a digest
 # algorithm that ISO 18013-5 does not allow and base-iso has no digest, so longfellow is compared
 # only with the ISO-compliant versions.
@@ -73,7 +79,7 @@ def gates(json_path, cwd):
 
 def benchmark(src, runs):
     with tempfile.TemporaryDirectory() as tmp:
-        # Mirror implementations/ so that relative path dependencies (../lib, ../../iso/lib) resolve
+        # Mirror implementations/ so that relative path dependencies (../lib, ../../iso/common/lib) resolve
         work = Path(tmp) / src.relative_to(IMPLEMENTATIONS)
         for d in [src] + path_dependencies(src):
             shutil.copytree(d, Path(tmp) / d.relative_to(IMPLEMENTATIONS),
@@ -154,7 +160,7 @@ def main():
         for variant in variants:
             label = f"{variant}/{scenario}"
             print(f"Benchmarking {label} ({args.runs} runs)...", flush=True)
-            results[label] = benchmark(IMPLEMENTATIONS / variant / scenario, args.runs)
+            results[label] = benchmark(IMPLEMENTATIONS / VARIANT_DIR[variant] / scenario, args.runs)
 
     print()
     print(f"{'Circuit':<24}{'Gates':>10}  {'Witness (nargo execute)':>24}"
