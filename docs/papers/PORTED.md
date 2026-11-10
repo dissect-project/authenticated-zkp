@@ -12,8 +12,10 @@ own designs and are not ports. For the papers that are not ported, see `NOT_PORT
 
 Each port reproduces the **relation** the paper proves: what is public, what is private, and every
 check the paper's circuit makes. It does not reproduce the paper's proof system. Every variant is
-compiled to one Noir circuit and proven with UltraHonk (Barretenberg). Differences in gates and
-proving time between variants therefore come from the relations alone.
+compiled to one Noir circuit and proven with UltraHonk (Barretenberg). Differences in gates
+between variants therefore come from the relations alone. Proving time also depends on how Noir
+compiles each relation (black-box functions or Noir code) and on the power of two the circuit is
+padded to; `tests/proving-time.md` explains both.
 
 The ports share the following with the other ISO variants:
 
@@ -129,6 +131,9 @@ unsigned witness.
    which does not start a token, or a `validUntil` or `deviceKey` in another issuer-signed map.
 4. **Encodings.** Only definite lengths, as mdoc requires; string lengths and container counts
    below 65536. `t_now` is a CBOR `tdate` with second precision.
+5. **Dates of the predicate.** `t_now` checks the MSO's validity. A predicate that needs a date
+   (`today` in `age`, the rental dates) takes it as its own public input, as in every other
+   variant. The circuit does not tie it to `t_now`; the verifier sets both.
 
 Tests: `implementations/longfellow/test_soundness.py` checks that the circuit rejects:
 
