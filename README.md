@@ -14,7 +14,7 @@ Five variations are implemented, differing in the hash function used to bind the
 | `mimc` | MiMC BN254 | ZKP-friendly hash function; low circuit complexity |
 | `poseidon` | Poseidon | ZKP-friendly hash function; widely used in ZK protocols |
 | `sha256-iso`, `sha512-iso`, `poseidon-iso`, `base-iso` | as above | ISO/IEC 18013-5 inputs: the commitment is the MSO digest of `IssuerSignedItemBytes` (digestID, random, elementIdentifier, elementValue) and values use their ISO encoding; `poseidon-iso` is for comparison only, as ISO 18013-5 allows only SHA-2. `int`, `age`, `nationality` and `str` scenarios. |
-| `longfellow` | SHA-256 + in-circuit ECDSA P-256 | Noir port of the Longfellow-zk mdoc circuit (issuer and device signatures verified in-circuit); `int`, `age`, `nationality` and `str` scenarios. |
+| `longfellow` | SHA-256 + in-circuit ECDSA P-256 | Noir port of the Longfellow-zk mdoc circuit (in-circuit CBOR parsing of the MSO with path checks, issuer and device signatures verified in-circuit); `int`, `age`, `nationality` and `str` scenarios. |
 | `vega` | SHA-256 + in-circuit ECDSA P-256 | Noir port of the VegaSC mdoc circuit (Figure 9a of the Vega paper: length-hiding SHA-256, lookup-based field extraction without CBOR parsing, issuer and device signatures in-circuit), run on the same credentials as `longfellow`; `int`, `age`, `nationality` and `str` scenarios. |
 
 Each variation includes three **scenarios**. The primary scenario emulates identity-related attribute proofs:
@@ -39,6 +39,9 @@ Each variation includes three **scenarios**. The primary scenario emulates ident
 ```
 authenticated-zkp/
 ├── docs/
+│   ├── papers/               # Longfellow, Crescent and Vega papers
+│   │   ├── PORTED.md         # How Longfellow and VegaSC were ported, and every departure
+│   │   └── NOT_PORTED.md     # Why Crescent and VegaMC are not ported
 │   └── testing-app.png       # Screenshot of the testing application
 ├── implementations/
 │   ├── base/                 # No hash authentication
@@ -60,10 +63,10 @@ authenticated-zkp/
 │   │   └── generate.py       # Builds (or reads) an item and writes Prover.toml / Dart inputs
 │   │
 │   ├── longfellow/           # Noir port of the Longfellow-zk mdoc circuit (see longfellow/README.md)
-│   │   ├── lib/              # Noir library: in-circuit MSO, signature and device checks
+│   │   ├── lib/              # Noir library: SHA-256, in-circuit CBOR parsing of the MSO, signatures
 │   │   ├── age/  int/  nationality/  str/
 │   │   ├── generate.py       # Builds a signed credential and writes Prover.toml / Dart inputs
-│   │   └── test_soundness.py # Attacks the circuit must reject
+│   │   └── test_soundness.py # Attacks the circuit must reject, including fields at the wrong path
 │   │
 │   └── vega/                 # Noir port of the VegaSC mdoc circuit (see vega/README.md)
 │       ├── lib/              # Noir library: length-hiding SHA-256, lookup field extraction, signatures

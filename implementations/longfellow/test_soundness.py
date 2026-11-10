@@ -9,6 +9,9 @@ inputs and rejects each attack with the expected assertion:
     covered by the issuer signature): a forged attribute digest, the attacker's own device key,
     and a later validUntil;
   - an item whose digestID differs from the key of the MSO entry it points to;
+  - fields at the right bytes but the wrong MSO path: a namespace digest map, a validUntil and a
+    deviceKey that the issuer signed inside another top-level map (`status`), which the token
+    checks alone accept and the tree positions reject;
   - an MSO containing a string with a 2-byte length (>= 256 bytes), which the tokenizer must
     measure correctly.
 
@@ -77,6 +80,59 @@ def later_valid_until(w):
     w.update(vu_off=off, now_cbor=list(cbor2.dumps(cbor2.CBORTag(0, "2031-06-01T12:00:00Z"))))
 
 
+def first_match_build(mso_extra):
+    """Builds a credential whose MSO repeats field patterns: generate.py otherwise requires them to
+    be unique, here the first occurrence is kept and the test sets the attacked offset itself."""
+    unique = g.find_token
+    g.find_token = lambda buf, pattern, start=g.MSO_START: buf.find(pattern, start)
+    try:
+        return credential(mso_extra)
+    finally:
+        g.find_token = unique
+
+
+def in_status(w, pattern):
+    """Offset of `pattern` inside the issuer-signed `status` map."""
+    signed = bytes(w["signed"][:w["signed_len"]])
+    off = signed.find(pattern, signed.find(b"\x66status"))
+    assert off >= 0
+    return off
+
+
+def nested_namespace():
+    """Claims age_in_years = 200 (> 150) with a digest that the issuer signed under
+    MSO[status][org.iso.18013.5.1], not MSO[valueDigests][org.iso.18013.5.1]."""
+    item = g.issuer_signed_item(5, b"\x00" * g.RANDOM_LEN, "age_in_years", 200)
+    w = first_match_build({"status": {g.NAMESPACE: {5: hashlib.sha256(item).digest()}}})
+    ns_off = in_status(w, b"\x71" + g.NAMESPACE.encode())
+    w.update(ns_off=ns_off, digest_off=ns_off + 19, random_cbor=list(cbor2.dumps(b"\x00" * g.RANDOM_LEN)),
+             x_cbor=uint_cbor(200), y_cbor=uint_cbor(150))
+    return w
+
+
+def nested_valid_until():
+    """Uses an expired credential with a validUntil of 2099 that the issuer signed under
+    MSO[status], not MSO[validityInfo]."""
+    w = first_match_build({"status": {"validUntil": cbor2.CBORTag(0, "2099-01-01T00:00:00Z")}})
+    w.update(vu_off=in_status(w, b"\x6avalidUntil\xc0"),
+             now_cbor=list(cbor2.dumps(cbor2.CBORTag(0, "2031-06-01T12:00:00Z"))))
+    return w
+
+
+ATTACKER = ec.generate_private_key(ec.SECP256R1())
+
+
+def nested_device_key():
+    """Uses a copied credential with the attacker's device key, which the issuer signed under
+    MSO[status], not MSO[deviceKeyInfo]."""
+    x, y = g.pub_xy(ATTACKER)
+    w = first_match_build({"status": {"deviceKey": {1: 2, -1: 1, -2: bytes(x), -3: bytes(y)}}})
+    msg = bytes(w["device_msg"][:w["device_msg_len"]])
+    w.update(dk_off=in_status(w, b"\x69deviceKey\xa4"),
+             device_sig=g.sign(ATTACKER, hashlib.sha256(msg).digest()))
+    return w
+
+
 def other_digest_id(w):
     """Claims the item has another digestID than the MSO entry it points to."""
     w.update(digest_id_cbor=uint_cbor(w["digest_id"] + 1))
@@ -109,6 +165,12 @@ TESTS = [
     ("attacker device key after the signed bytes", credential, own_device_key, OUTSIDE),
     ("later validUntil after the signed bytes", credential, later_valid_until, OUTSIDE),
     ("item digestID different from the MSO entry's key", credential, other_digest_id, "digestID mismatch"),
+    ("attribute digest signed under MSO[status]", nested_namespace, None,
+     "Namespace is not in valueDigests"),
+    ("later validUntil signed under MSO[status]", nested_valid_until, None,
+     "validUntil is not in validityInfo"),
+    ("attacker device key signed under MSO[status]", nested_device_key, None,
+     "deviceKey is not in deviceKeyInfo"),
     # 300-byte string in the MSO (2-byte CBOR length); the aamva namespace is dropped to stay
     # within the 2231-byte bound
     ("MSO with a 300-byte string", lambda: credential({"status": "u" * 300}), None, None),

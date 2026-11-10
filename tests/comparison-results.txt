@@ -1,86 +1,86 @@
 
 Circuit                      Gates   Witness (nargo execute)      Proof (bb prove)    Verify (bb verify)
-sha256/int                   7,158          57.4 ±    1.2 ms      296.6 ±    9.0 ms       36.8 ±    0.5 ms
-sha256-iso/int              12,838          57.6 ±    0.6 ms      316.4 ±    7.7 ms       37.3 ±    0.3 ms
-sha512/int                  71,846         410.9 ±   30.1 ms      870.0 ±   98.8 ms       38.0 ±    2.2 ms
-sha512-iso/int              74,732         443.1 ±   40.2 ms      990.5 ±  121.8 ms       39.9 ±    4.0 ms
-poseidon/int                 3,818          98.6 ±    4.8 ms      111.2 ±    4.6 ms       37.0 ±    0.8 ms
-poseidon-iso/int             5,138         107.5 ±    2.6 ms      130.2 ±    4.9 ms       36.9 ±    0.4 ms
-base/int                     2,768          49.5 ±    0.4 ms       92.3 ±    0.8 ms       38.3 ±    5.8 ms
-base-iso/int                 3,117          56.7 ±    8.2 ms       96.9 ±    4.5 ms       36.5 ±    0.3 ms
-longfellow/int             474,122         822.2 ±   16.2 ms     3788.8 ±   91.5 ms       39.5 ±    0.9 ms
-vega/int                   309,920         115.5 ±    1.2 ms     2393.0 ±   59.8 ms       38.8 ±    0.9 ms
-sha256/age                   7,493          60.4 ±    5.8 ms      302.6 ±   19.0 ms       39.1 ±    5.0 ms
-sha256-iso/age              12,979          57.3 ±    1.1 ms      312.5 ±    4.9 ms       37.3 ±    0.3 ms
-sha512/age                  72,130         399.8 ±    3.4 ms      805.7 ±   20.2 ms       38.0 ±    0.5 ms
-sha512-iso/age              74,870         419.7 ±    4.2 ms      860.7 ±   55.8 ms       38.1 ±    0.8 ms
-poseidon/age                 4,108          95.3 ±    0.5 ms      114.8 ±    1.5 ms       36.8 ±    0.2 ms
-poseidon-iso/age             5,303         106.2 ±    1.5 ms      131.8 ±   10.1 ms       37.1 ±    0.6 ms
-base/age                     3,102          49.7 ±    0.7 ms       95.6 ±    0.6 ms       36.4 ±    0.3 ms
-base-iso/age                 3,333          53.8 ±    1.1 ms       99.8 ±    3.2 ms       37.8 ±    3.7 ms
-longfellow/age             474,210         818.4 ±    5.8 ms     3806.2 ±   79.6 ms       40.4 ±    2.3 ms
-vega/age                   310,114         115.7 ±    0.6 ms     2416.7 ±   65.5 ms       39.1 ±    1.1 ms
-sha256/nationality           7,252          55.9 ±    0.6 ms      295.7 ±   10.4 ms       37.0 ±    0.2 ms
-sha256-iso/nationality      12,812          56.2 ±    0.2 ms      313.4 ±    5.6 ms       37.5 ±    0.5 ms
-sha512/nationality          71,889         398.5 ±    2.0 ms      797.4 ±   26.8 ms       37.9 ±    0.4 ms
-sha512-iso/nationality      74,891         425.9 ±   15.5 ms      897.9 ±  102.1 ms       38.8 ±    1.9 ms
-poseidon/nationality         1,132          94.5 ±    0.6 ms       89.8 ±    0.7 ms       36.2 ±    0.3 ms
-poseidon-iso/nationality     5,052         105.9 ±    2.7 ms      128.2 ±    3.1 ms       37.1 ±    0.8 ms
-base/nationality               126          48.8 ±    0.5 ms       66.0 ±    0.5 ms       37.5 ±    4.6 ms
-base-iso/nationality           201          53.1 ±    1.8 ms       68.5 ±    1.0 ms       36.2 ±    0.5 ms
-longfellow/nationality     474,196         822.5 ±   12.0 ms     3847.7 ±  153.4 ms       39.6 ±    0.5 ms
-vega/nationality           310,159         117.1 ±    2.8 ms     2419.1 ±   68.4 ms       38.8 ±    0.6 ms
-sha256/str                  13,331          69.8 ±    1.7 ms      319.3 ±    2.7 ms       37.6 ±    0.4 ms
-sha256-iso/str              19,065          69.5 ±    0.3 ms      349.8 ±   18.4 ms       37.5 ±    0.3 ms
-sha512/str                  74,902         425.7 ±   10.5 ms      881.0 ±   63.7 ms       38.1 ±    1.1 ms
-sha512-iso/str             137,679         768.9 ±    6.9 ms     1832.5 ±   69.0 ms       38.4 ±    0.6 ms
-poseidon/str                 3,156         105.7 ±    0.7 ms      112.3 ±    0.8 ms       36.3 ±    0.1 ms
-poseidon-iso/str             7,114         114.4 ±    0.5 ms      142.8 ±    1.3 ms       37.0 ±    0.3 ms
-base/str                     2,135          62.4 ±    6.1 ms      101.3 ±    2.5 ms       36.6 ±    0.7 ms
-base-iso/str                 2,139          64.9 ±    1.8 ms      100.6 ±    1.4 ms       36.7 ±    0.5 ms
-longfellow/str             480,460         832.2 ±    9.0 ms     3823.6 ±   92.5 ms       40.3 ±    1.8 ms
-vega/str                   317,768         131.7 ±    1.0 ms     2483.1 ±  117.4 ms       38.8 ±    1.1 ms
+sha256/int                   7,158          57.6 ±    1.5 ms      297.2 ±    9.1 ms       37.3 ±    1.1 ms
+sha256-iso/int              12,838          57.4 ±    2.2 ms      315.6 ±    5.6 ms       36.9 ±    0.2 ms
+sha512/int                  71,846         397.0 ±    7.5 ms      790.0 ±   17.7 ms       37.4 ±    0.7 ms
+sha512-iso/int              74,732         415.1 ±    5.9 ms      803.6 ±   10.5 ms       37.3 ±    0.3 ms
+poseidon/int                 3,818          95.8 ±    2.1 ms      107.4 ±    2.0 ms       36.2 ±    0.1 ms
+poseidon-iso/int             5,138         104.8 ±    2.3 ms      125.4 ±    1.5 ms       36.4 ±    0.1 ms
+base/int                     2,768          49.0 ±    0.4 ms       91.7 ±    1.0 ms       36.1 ±    0.1 ms
+base-iso/int                 3,117          52.7 ±    0.3 ms       94.7 ±    0.7 ms       36.0 ±    0.2 ms
+longfellow/int             440,378         642.7 ±   13.3 ms     3370.8 ±  175.9 ms       39.1 ±    0.5 ms
+vega/int                   309,920         137.9 ±   32.8 ms     3049.1 ±  588.6 ms       47.6 ±   12.3 ms
+sha256/age                   7,493          74.6 ±   19.1 ms      419.8 ±   70.7 ms       41.6 ±    3.5 ms
+sha256-iso/age              12,979          67.2 ±    3.7 ms      407.0 ±   36.9 ms       39.7 ±    1.0 ms
+sha512/age                  72,130         436.9 ±   40.6 ms      959.0 ±  186.1 ms       39.1 ±    1.6 ms
+sha512-iso/age              74,870         425.1 ±   10.9 ms      848.4 ±   39.1 ms       40.1 ±    6.5 ms
+poseidon/age                 4,108          96.1 ±    0.8 ms      118.5 ±    6.7 ms       36.9 ±    1.5 ms
+poseidon-iso/age             5,303         106.8 ±    1.2 ms      130.3 ±    1.4 ms       36.8 ±    0.3 ms
+base/age                     3,102          51.0 ±    1.3 ms       98.7 ±    3.3 ms       37.0 ±    0.6 ms
+base-iso/age                 3,333          53.0 ±    0.3 ms       97.3 ±    0.6 ms       36.5 ±    0.3 ms
+longfellow/age             440,468         632.9 ±    4.7 ms     3194.8 ±   40.0 ms       39.2 ±    0.4 ms
+vega/age                   310,114         121.3 ±   10.7 ms     2365.7 ±   29.4 ms       39.6 ±    2.8 ms
+sha256/nationality           7,252          56.8 ±    0.3 ms      292.8 ±    6.1 ms       37.3 ±    0.4 ms
+sha256-iso/nationality      12,812          57.2 ±    1.6 ms      314.3 ±    7.9 ms       37.5 ±    0.7 ms
+sha512/nationality          71,889         398.2 ±    2.1 ms      783.4 ±   11.5 ms       37.6 ±    0.2 ms
+sha512-iso/nationality      74,891         413.9 ±    1.9 ms      803.2 ±   11.0 ms       37.5 ±    0.3 ms
+poseidon/nationality         1,132          95.0 ±    1.1 ms       89.9 ±    0.9 ms       36.0 ±    0.2 ms
+poseidon-iso/nationality     5,052         106.0 ±    1.3 ms      133.1 ±   15.4 ms       36.9 ±    0.7 ms
+base/nationality               126          49.8 ±    0.7 ms       66.0 ±    0.3 ms       35.7 ±    0.1 ms
+base-iso/nationality           201          53.0 ±    0.9 ms       68.3 ±    0.5 ms       35.7 ±    0.2 ms
+longfellow/nationality     440,451         635.6 ±    4.3 ms     3216.8 ±   44.1 ms       39.2 ±    0.8 ms
+vega/nationality           310,159         118.5 ±    2.9 ms     2381.9 ±   59.8 ms       38.5 ±    0.9 ms
+sha256/str                  13,331          69.5 ±    0.6 ms      324.1 ±    4.7 ms       37.4 ±    0.6 ms
+sha256-iso/str              19,065          70.3 ±    1.9 ms      347.4 ±   15.8 ms       37.5 ±    0.3 ms
+sha512/str                  74,902         423.8 ±   19.0 ms      859.4 ±   37.6 ms       38.2 ±    0.7 ms
+sha512-iso/str             137,679         774.3 ±    6.9 ms     1576.6 ±   28.9 ms       38.7 ±    0.9 ms
+poseidon/str                 3,156         107.3 ±    0.6 ms      115.6 ±    2.8 ms       37.0 ±    1.2 ms
+poseidon-iso/str             7,114         115.4 ±    1.6 ms      144.5 ±    2.1 ms       36.8 ±    0.2 ms
+base/str                     2,135          60.4 ±    0.6 ms       99.0 ±    0.5 ms       36.4 ±    0.3 ms
+base-iso/str                 2,139          63.3 ±    0.9 ms       99.6 ±    1.0 ms       36.5 ±    0.3 ms
+longfellow/str             446,714         647.4 ±   15.4 ms     3381.5 ±  265.9 ms       39.5 ±    0.9 ms
+vega/str                   317,768         130.8 ±    0.4 ms     2425.4 ±   21.6 ms       38.1 ±    0.3 ms
 
 ISO 18013-5 versions vs their counterparts
 Comparison                   Scenario  Gates (ref)    Gates  Gates ratio  Prove ms (ref)  Prove ms  Prove ratio
 ------------------------  -----------  -----------  -------  -----------  --------------  --------  -----------
-sha256-iso vs sha256              int        7,158   12,838        1.79x           296.6     316.4        1.07x
-sha256-iso vs sha256              age        7,493   12,979        1.73x           302.6     312.5        1.03x
-sha256-iso vs sha256      nationality        7,252   12,812        1.77x           295.7     313.4        1.06x
-sha256-iso vs sha256              str       13,331   19,065        1.43x           319.3     349.8        1.10x
-sha512-iso vs sha512              int       71,846   74,732        1.04x           870.0     990.5        1.14x
-sha512-iso vs sha512              age       72,130   74,870        1.04x           805.7     860.7        1.07x
-sha512-iso vs sha512      nationality       71,889   74,891        1.04x           797.4     897.9        1.13x
-sha512-iso vs sha512              str       74,902  137,679        1.84x           881.0    1832.5        2.08x
-poseidon-iso vs poseidon          int        3,818    5,138        1.35x           111.2     130.2        1.17x
-poseidon-iso vs poseidon          age        4,108    5,303        1.29x           114.8     131.8        1.15x
-poseidon-iso vs poseidon  nationality        1,132    5,052        4.46x            89.8     128.2        1.43x
-poseidon-iso vs poseidon          str        3,156    7,114        2.25x           112.3     142.8        1.27x
-base-iso vs base                  int        2,768    3,117        1.13x            92.3      96.9        1.05x
-base-iso vs base                  age        3,102    3,333        1.07x            95.6      99.8        1.04x
-base-iso vs base          nationality          126      201        1.60x            66.0      68.5        1.04x
-base-iso vs base                  str        2,135    2,139        1.00x           101.3     100.6        0.99x
+sha256-iso vs sha256              int        7,158   12,838        1.79x           297.2     315.6        1.06x
+sha256-iso vs sha256              age        7,493   12,979        1.73x           419.8     407.0        0.97x
+sha256-iso vs sha256      nationality        7,252   12,812        1.77x           292.8     314.3        1.07x
+sha256-iso vs sha256              str       13,331   19,065        1.43x           324.1     347.4        1.07x
+sha512-iso vs sha512              int       71,846   74,732        1.04x           790.0     803.6        1.02x
+sha512-iso vs sha512              age       72,130   74,870        1.04x           959.0     848.4        0.88x
+sha512-iso vs sha512      nationality       71,889   74,891        1.04x           783.4     803.2        1.03x
+sha512-iso vs sha512              str       74,902  137,679        1.84x           859.4    1576.6        1.83x
+poseidon-iso vs poseidon          int        3,818    5,138        1.35x           107.4     125.4        1.17x
+poseidon-iso vs poseidon          age        4,108    5,303        1.29x           118.5     130.3        1.10x
+poseidon-iso vs poseidon  nationality        1,132    5,052        4.46x            89.9     133.1        1.48x
+poseidon-iso vs poseidon          str        3,156    7,114        2.25x           115.6     144.5        1.25x
+base-iso vs base                  int        2,768    3,117        1.13x            91.7      94.7        1.03x
+base-iso vs base                  age        3,102    3,333        1.07x            98.7      97.3        0.99x
+base-iso vs base          nationality          126      201        1.60x            66.0      68.3        1.03x
+base-iso vs base                  str        2,135    2,139        1.00x            99.0      99.6        1.01x
 
 Longfellow vs the ISO-compliant versions
 Comparison                   Scenario  Gates (ref)    Gates  Gates ratio  Prove ms (ref)  Prove ms  Prove ratio
 ------------------------  -----------  -----------  -------  -----------  --------------  --------  -----------
-longfellow vs sha256-iso          int       12,838  474,122       36.93x           316.4    3788.8       11.98x
-longfellow vs sha256-iso          age       12,979  474,210       36.54x           312.5    3806.2       12.18x
-longfellow vs sha256-iso  nationality       12,812  474,196       37.01x           313.4    3847.7       12.28x
-longfellow vs sha256-iso          str       19,065  480,460       25.20x           349.8    3823.6       10.93x
-longfellow vs sha512-iso          int       74,732  474,122        6.34x           990.5    3788.8        3.83x
-longfellow vs sha512-iso          age       74,870  474,210        6.33x           860.7    3806.2        4.42x
-longfellow vs sha512-iso  nationality       74,891  474,196        6.33x           897.9    3847.7        4.29x
-longfellow vs sha512-iso          str      137,679  480,460        3.49x          1832.5    3823.6        2.09x
+longfellow vs sha256-iso          int       12,838  440,378       34.30x           315.6    3370.8       10.68x
+longfellow vs sha256-iso          age       12,979  440,468       33.94x           407.0    3194.8        7.85x
+longfellow vs sha256-iso  nationality       12,812  440,451       34.38x           314.3    3216.8       10.24x
+longfellow vs sha256-iso          str       19,065  446,714       23.43x           347.4    3381.5        9.73x
+longfellow vs sha512-iso          int       74,732  440,378        5.89x           803.6    3370.8        4.19x
+longfellow vs sha512-iso          age       74,870  440,468        5.88x           848.4    3194.8        3.77x
+longfellow vs sha512-iso  nationality       74,891  440,451        5.88x           803.2    3216.8        4.00x
+longfellow vs sha512-iso          str      137,679  446,714        3.24x          1576.6    3381.5        2.14x
 
 VegaSC vs Longfellow and sha256-iso
 Comparison             Scenario  Gates (ref)    Gates  Gates ratio  Prove ms (ref)  Prove ms  Prove ratio
 ------------------  -----------  -----------  -------  -----------  --------------  --------  -----------
-vega vs longfellow          int      474,122  309,920        0.65x          3788.8    2393.0        0.63x
-vega vs longfellow          age      474,210  310,114        0.65x          3806.2    2416.7        0.63x
-vega vs longfellow  nationality      474,196  310,159        0.65x          3847.7    2419.1        0.63x
-vega vs longfellow          str      480,460  317,768        0.66x          3823.6    2483.1        0.65x
-vega vs sha256-iso          int       12,838  309,920       24.14x           316.4    2393.0        7.56x
-vega vs sha256-iso          age       12,979  310,114       23.89x           312.5    2416.7        7.73x
-vega vs sha256-iso  nationality       12,812  310,159       24.21x           313.4    2419.1        7.72x
-vega vs sha256-iso          str       19,065  317,768       16.67x           349.8    2483.1        7.10x
+vega vs longfellow          int      440,378  309,920        0.70x          3370.8    3049.1        0.90x
+vega vs longfellow          age      440,468  310,114        0.70x          3194.8    2365.7        0.74x
+vega vs longfellow  nationality      440,451  310,159        0.70x          3216.8    2381.9        0.74x
+vega vs longfellow          str      446,714  317,768        0.71x          3381.5    2425.4        0.72x
+vega vs sha256-iso          int       12,838  309,920       24.14x           315.6    3049.1        9.66x
+vega vs sha256-iso          age       12,979  310,114       23.89x           407.0    2365.7        5.81x
+vega vs sha256-iso  nationality       12,812  310,159       24.21x           314.3    2381.9        7.58x
+vega vs sha256-iso          str       19,065  317,768       16.67x           347.4    2425.4        6.98x

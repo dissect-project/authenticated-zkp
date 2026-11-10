@@ -16,11 +16,17 @@ assertion:
   - an expired credential (Figure 9a, step 2);
   - an MSO containing a string with a 2-byte length (>= 256 bytes).
 
-The last two tests document the assumption Vega makes instead of parsing CBOR (Section 5): the
-issuer signs well-formed MSOs in which each field prefix is unique. An issuer-signed byte string
-that happens to contain the bytes of a validUntil or deviceKey field breaks it: the VegaSC
-relation accepts the forged field, while the Longfellow port (whose tokenizer checks that each
-field starts a CBOR token) rejects the same witness. Those two tests run both circuits.
+The last four tests document the assumption Vega makes instead of parsing CBOR (Section 5): the
+issuer signs well-formed MSOs in which each field prefix is unique. Two ways of breaking it are
+tested, each for validUntil and deviceKey:
+
+  - an issuer-signed byte string that contains the bytes of the field;
+  - an issuer-signed map, other than validityInfo or deviceKeyInfo, with a field of that name.
+
+The VegaSC relation accepts the forged field in both cases. The Longfellow port, which parses the
+MSO, rejects the same witness: in a byte string the field does not start a CBOR token, and in the
+other map it is not at the path MSO[validityInfo][validUntil] or MSO[deviceKeyInfo][deviceKey].
+Those four tests run both circuits.
 
 Usage: python3 test_soundness.py      Requires: nargo, cbor2, cryptography
 """
@@ -170,14 +176,14 @@ def first_match(buf, pattern, start=lf.MSO_START):
     return buf.find(pattern, start)
 
 
-def forged_inside(make_field):
-    """A credential whose MSO has an issuer-signed byte string containing a forged field.
+def forged_inside(field, extra=None):
+    """A credential whose MSO has the issuer-signed entry EXTRA: extra, by default the byte string
+    `field`, which contains the bytes of a forged field.
     Returns (Longfellow witness, offset of the forged field)."""
-    field = make_field()
     find_token = lf.find_token
     lf.find_token = first_match  # the prefix now occurs twice; Longfellow points at the real one
     try:
-        w = credential({EXTRA: field})
+        w = credential({EXTRA: field if extra is None else extra})
     finally:
         lf.find_token = find_token
     signed = bytes(w["signed"][:w["signed_len"]])
@@ -187,15 +193,39 @@ def forged_inside(make_field):
 
 
 def prefix_in_bstr_valid_until():
-    w, off = forged_inside(lambda: b"\x6avalidUntil\xc0\x74" + b"2099-01-01T00:00:00Z")
+    return forged_valid_until(nested=False)
+
+
+def prefix_in_bstr_device_key():
+    return forged_device_key(nested=False)
+
+
+def prefix_in_map_valid_until():
+    return forged_valid_until(nested=True)
+
+
+def prefix_in_map_device_key():
+    return forged_device_key(nested=True)
+
+
+LATER = "2099-01-01T00:00:00Z"
+
+
+def forged_valid_until(nested):
+    """An expired credential presented with a forged validUntil of 2099."""
+    field = b"\x6avalidUntil\xc0\x74" + LATER.encode()
+    w, off = forged_inside(field, {"validUntil": cbor2.CBORTag(0, LATER)} if nested else None)
     w["vu_off"] = off
     w["now_cbor"] = list(cbor2.dumps(cbor2.CBORTag(0, LATE + "T12:00:00Z")))
     return w, vega(w)
 
 
-def prefix_in_bstr_device_key():
+def forged_device_key(nested):
+    """A copied credential presented with the attacker's device key."""
     key, field = attacker_key()
-    w, off = forged_inside(lambda: field)
+    x, y = lf.pub_xy(key)
+    w, off = forged_inside(field, {"deviceKey": {1: 2, -1: 1, -2: bytes(x), -3: bytes(y)}}
+                           if nested else None)
     w["dk_off"] = off
     msg = bytes(w["device_msg"][:w["device_msg_len"]])
     w["device_sig"] = lf.sign(key, hashlib.sha256(msg).digest())  # the attacker signs the session
@@ -260,11 +290,15 @@ TESTS = [
     ("expired credential", tampered(expired), "Credential has expired", False),
     ("MSO with a 300-byte string",
      lambda: (lambda w: (w, vega(w)))(credential({"status": "u" * 300})), None, False),
-    # Vega's well-formedness assumption: accepted by VegaSC, rejected by the Longfellow tokenizer
+    # Vega's well-formedness assumption: accepted by VegaSC, rejected by the Longfellow parser
     ("validUntil forged inside an issuer-signed bstr (assumption)", prefix_in_bstr_valid_until,
      None, "validUntil is not a CBOR token"),
     ("deviceKey forged inside an issuer-signed bstr (assumption)", prefix_in_bstr_device_key,
      None, "deviceKey is not a CBOR token"),
+    ("validUntil forged in another issuer-signed map (assumption)", prefix_in_map_valid_until,
+     None, "validUntil is not in validityInfo"),
+    ("deviceKey forged in another issuer-signed map (assumption)", prefix_in_map_device_key,
+     None, "deviceKey is not in deviceKeyInfo"),
 ]
 
 

@@ -97,10 +97,16 @@ plain SHA-256 benchmark, but not the mDL circuit, so these follow the paper and 
 
 It also checks that an MSO with a 2-byte-length string is accepted.
 
-The last two tests document **Vega's well-formedness assumption** (§5): the issuer signs
-well-formed MSOs in which every field prefix is unique. Suppose an issuer-signed byte string
-contains the bytes of a `validUntil` or `deviceKey` field. The VegaSC relation **accepts** the
-forged field, so an expired credential is presented as valid, or a copied credential with the
-attacker's device key. On the same witness, the Longfellow port **rejects** it, because its
-tokenizer requires each field to start a CBOR token. The attack needs the issuer to sign such
-bytes; it is not a bug in the port but the cost of skipping CBOR parsing.
+The last four tests document **Vega's well-formedness assumption** (§5): the issuer signs
+well-formed MSOs in which every field prefix is unique. Each test forges a `validUntil` or
+`deviceKey` field in one of two places:
+
+- inside an issuer-signed byte string;
+- in an issuer-signed map other than `validityInfo` or `deviceKeyInfo`.
+
+The VegaSC relation **accepts** the forged field. An expired credential is then presented as
+valid, or a copied credential with the attacker's device key. On the same witness, the Longfellow
+port **rejects** it, because it parses the MSO. In a byte string the forged field does not start a
+CBOR token; in another map it is not at the path `MSO[validityInfo][validUntil]` or
+`MSO[deviceKeyInfo][deviceKey]`. The attack needs the issuer to sign such bytes. It is not a bug in
+the port but the cost of skipping CBOR parsing.
