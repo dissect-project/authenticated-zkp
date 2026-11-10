@@ -6,18 +6,25 @@ sha512-iso and poseidon-iso (the latter for comparison only), and the ports of l
 all run on the same credentials (../credentials). Every variant is compared with base (the cost
 of authentication), longfellow with the ISO-compliant digests (sha256-iso and sha512-iso), and vega
 with longfellow and sha256-iso. For each circuit it reports the number of gates (bb gates) and the
-average time to generate the witness (nargo execute), the proof (bb prove) and to verify it
-(bb verify), on holder1's inputs (Prover.toml). The circuits are copied to a temporary
+average time to generate the witness (nargo execute), to build the circuit from the ACIR
+bytecode (bb gates), to generate the proof (bb prove, which includes building the circuit) and to
+verify it (bb verify), on holder1's inputs (Prover.toml). The circuits are copied to a temporary
 directory, so the target/ folders in the repository are left untouched.
 
+Writes the raw measurements to tests/comparison-results.json and the report to
+tests/comparison-results.md; --report rebuilds the report from the JSON without benchmarking.
+
 Usage: python3 tests/comparison.py [SCENARIO ...] [--variants V ...] [--runs N]
+       python3 tests/comparison.py --report
        SCENARIO is one of age, rental, residence, veteran (default: all of them)
        V is any of the variants below (default: all of them)
 Requires: nargo and bb on the PATH.
 """
 
 import argparse
+import datetime
 import json
+import platform
 import shutil
 import statistics
 import subprocess
@@ -38,6 +45,9 @@ VARIANT_DIR = {
 # algorithm that ISO 18013-5 does not allow, so longfellow is compared only with the ISO-compliant
 # digests.
 BASE_PAIRS = [(v, "base") for v in VARIANTS[1:]]
+VARIANT_LABEL = {"base": "base (predicate only)"}
+RESULTS_JSON = ROOT / "tests" / "comparison-results.json"
+RESULTS_MD = ROOT / "tests" / "comparison-results.md"
 LONGFELLOW_PAIRS = [("longfellow", "sha256-iso"), ("longfellow", "sha512-iso")]
 VEGA_PAIRS = [("vega", "longfellow"), ("vega", "sha256-iso")]
 
@@ -71,8 +81,9 @@ def path_dependencies(package):
 
 
 def gates(json_path, cwd):
-    _, out = run(["bb", "gates", "-b", str(json_path)], cwd)
-    return json.loads(out[out.index("{"):])["functions"][0]["circuit_size"]
+    elapsed, out = run(["bb", "gates", "-b", str(json_path)], cwd)
+    info = json.loads(out[out.index("{"):])["functions"][0]
+    return info["circuit_size"], info["acir_opcodes"], elapsed
 
 
 def benchmark(src, runs):
@@ -86,54 +97,112 @@ def benchmark(src, runs):
         circuit, witness = work / "target" / f"{name}.json", work / "target" / f"{name}.gz"
 
         run(["nargo", "compile"], work)
-        n_gates = gates(circuit, work)
+        n_gates, opcodes, _ = gates(circuit, work)
         run(["bb", "write_vk", "-b", str(circuit), "-o", "target"], work)
 
-        times = {"execute": [], "prove": [], "verify": []}
+        times = {"execute": [], "build": [], "prove": [], "verify": []}
         for _ in range(runs):
             times["execute"].append(run(["nargo", "execute"], work)[0])
+            times["build"].append(gates(circuit, work)[2])
             times["prove"].append(
                 run(["bb", "prove", "-b", str(circuit), "-w", str(witness), "-o", "target"], work)[0])
             times["verify"].append(
                 run(["bb", "verify", "-k", "target/vk", "-p", "target/proof",
                      "-i", "target/public_inputs"], work)[0])
-        return n_gates, times
+        return {"gates": n_gates, "opcodes": opcodes, "times": times}
 
 
-def print_table(header, rows):
-    """Prints rows as a table, with the first column left-aligned and the others right-aligned."""
-    widths = [max(len(str(r[i])) for r in [header] + rows) for i in range(len(header))]
-    line = lambda r: "  ".join(str(c).ljust(w) if i == 0 else str(c).rjust(w)
-                               for i, (c, w) in enumerate(zip(r, widths)))
-    print(line(header))
-    print("  ".join("-" * w for w in widths))
-    for r in rows:
-        print(line(r))
+# ---------------- report ----------------
+
+def ms(samples):
+    return statistics.mean(samples) * 1000
 
 
-def comparison_table(title, pairs, results, scenarios, variants):
-    """Gates and mean proving time of each variant against its reference, per scenario."""
+def short_time(samples):
+    t = ms(samples)
+    return f"{t / 1000:.2f} s" if t >= 1000 else f"{t:.0f} ms"
+
+
+def short_gates(n):
+    return f"{n / 1000:.1f}k" if n < 100_000 else f"{n / 1000:.0f}k"
+
+
+def mean_sd(samples):
+    sd = statistics.stdev(samples) * 1000 if len(samples) > 1 else 0.0
+    return f"{ms(samples):.1f} ± {sd:.1f}"
+
+
+def md_table(header, rows, align=None):
+    align = align or ["l"] + ["r"] * (len(header) - 1)
+    sep = ["---:" if a == "r" else "---" for a in align]
+    return "\n".join("| " + " | ".join(str(c) for c in r) + " |" for r in [header, sep] + rows)
+
+
+def comparison_rows(pairs, results, scenarios):
     rows = []
     for variant, reference in pairs:
-        if variant not in variants or reference not in variants:
-            continue
         for scenario in scenarios:
-            g, t = results[f"{variant}/{scenario}"]
-            g_ref, t_ref = results[f"{reference}/{scenario}"]
-            p, p_ref = statistics.mean(t["prove"]) * 1000, statistics.mean(t_ref["prove"]) * 1000
-            rows.append([f"{variant} vs {reference}", scenario, f"{g_ref:,}", f"{g:,}", f"{g / g_ref:.2f}x",
-                         f"{p_ref:.1f}", f"{p:.1f}", f"{p / p_ref:.2f}x"])
-    if rows:
-        print()
-        print(title)
-        print_table(["Comparison", "Scenario", "Gates (ref)", "Gates", "Gates ratio",
-                     "Prove ms (ref)", "Prove ms", "Prove ratio"], rows)
+            a, b = results.get(f"{variant}/{scenario}"), results.get(f"{reference}/{scenario}")
+            if a and b:
+                pa, pb = ms(a["times"]["prove"]), ms(b["times"]["prove"])
+                rows.append([f"{variant} vs {reference}", scenario, f"{b['gates']:,}",
+                             f"{a['gates']:,}", f"{a['gates'] / b['gates']:.2f}x", f"{pb:.0f}",
+                             f"{pa:.0f}", f"{pa / pb:.2f}x"])
+    return rows
 
 
-def fmt(samples):
-    mean = statistics.mean(samples) * 1000
-    std = statistics.stdev(samples) * 1000 if len(samples) > 1 else 0.0
-    return f"{mean:9.1f} ± {std:6.1f} ms"
+def report(data):
+    results, meta = data["results"], data["meta"]
+    scenarios = [s for s in SCENARIOS if any(k.endswith(f"/{s}") for k in results)]
+    variants = [v for v in VARIANTS if any(k.startswith(f"{v}/") for k in results)]
+    out = ["# Benchmark results", "",
+           f"`tests/comparison.py`, {meta['runs']} runs per circuit, {meta['date']}, "
+           f"{meta['machine']}, {meta['nargo']}, bb {meta['bb']}. Inputs: holder1 of "
+           "`credentials/` (the same credential in every variant).", "",
+           "## Summary", "",
+           "Gates (`bb gates`) and mean proving time (`bb prove`) per variant and scenario.", ""]
+    out.append(md_table(["Variant"] + scenarios, [
+        [VARIANT_LABEL.get(v, v)] + [
+            f"{short_gates(results[f'{v}/{s}']['gates'])} · {short_time(results[f'{v}/{s}']['times']['prove'])}"
+            if f"{v}/{s}" in results else "" for s in scenarios]
+        for v in variants], ["l"] + ["r"] * len(scenarios)))
+    verify = [statistics.median(r["times"]["verify"]) * 1000 for r in results.values()]
+    out += ["", f"Verification takes {min(verify):.0f} to {max(verify):.0f} ms (median per "
+            "circuit) for every circuit.",
+            "", "## Every circuit", "",
+            "Mean ± standard deviation in ms. *Build* is the construction of the circuit from the "
+            "ACIR bytecode (`bb gates`); *Prove* (`bb prove`) includes it. Building grows with the "
+            "number of ACIR opcodes, not only with the gates: SHA-512 has no black box in Noir and "
+            "compiles to many small opcodes, so sha512-iso spends a large share of its proving time "
+            "building the circuit (see `proving-time.md`).", ""]
+    out.append(md_table(
+        ["Circuit", "Gates", "ACIR opcodes", "Witness", "Build", "Prove", "Verify"],
+        [[k, f"{r['gates']:,}", f"{r['opcodes']:,}", mean_sd(r["times"]["execute"]),
+          mean_sd(r["times"]["build"]), mean_sd(r["times"]["prove"]), mean_sd(r["times"]["verify"])]
+         for k, r in results.items()]))
+    header = ["Comparison", "Scenario", "Gates (ref)", "Gates", "Gates ratio", "Prove ms (ref)",
+              "Prove ms", "Prove ratio"]
+    for title, pairs in [("Every variant vs base (the cost of authentication)", BASE_PAIRS),
+                         ("Longfellow vs the ISO-compliant digests", LONGFELLOW_PAIRS),
+                         ("VegaSC vs Longfellow and sha256-iso", VEGA_PAIRS)]:
+        rows = comparison_rows(pairs, results, scenarios)
+        if rows:
+            out += ["", f"## {title}", "", md_table(header, rows)]
+    return "\n".join(out) + "\n"
+
+
+def tool_version(cmd):
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True).stdout.strip().splitlines()[0]
+    except (OSError, IndexError):
+        return "unknown"
+
+
+def machine():
+    cpu = platform.processor()
+    if platform.system() == "Darwin":
+        cpu = tool_version(["sysctl", "-n", "machdep.cpu.brand_string"])
+    return f"{cpu} ({platform.system()} {platform.machine()})"
 
 
 def main():
@@ -143,7 +212,14 @@ def main():
     ap.add_argument("--variants", nargs="+", default=VARIANTS, metavar="V",
                     help=f"any of {', '.join(VARIANTS)} (default: all)")
     ap.add_argument("--runs", type=int, default=10, help="executions per circuit (default: 10)")
+    ap.add_argument("--report", action="store_true",
+                    help="rebuild the report from comparison-results.json without benchmarking")
     args = ap.parse_args()
+    if args.report:
+        data = json.loads(RESULTS_JSON.read_text())
+        RESULTS_MD.write_text(report(data))
+        print(f"wrote {RESULTS_MD}")
+        return
     for scenario in args.scenarios:
         if scenario not in SCENARIOS:
             ap.error(f"unknown scenario {scenario!r}, choose from {', '.join(SCENARIOS)}")
@@ -159,19 +235,15 @@ def main():
             label = f"{variant}/{scenario}"
             print(f"Benchmarking {label} ({args.runs} runs)...", flush=True)
             results[label] = benchmark(IMPLEMENTATIONS / VARIANT_DIR[variant] / scenario, args.runs)
-
-    print()
-    print(f"{'Circuit':<24}{'Gates':>10}  {'Witness (nargo execute)':>24}"
-          f"  {'Proof (bb prove)':>20}  {'Verify (bb verify)':>20}")
-    for label, (n_gates, t) in results.items():
-        print(f"{label:<24}{n_gates:>10,}  {fmt(t['execute']):>24}"
-              f"  {fmt(t['prove']):>20}  {fmt(t['verify']):>20}")
-
-    comparison_table("Every variant vs base (the cost of authentication)", BASE_PAIRS, results,
-                     scenarios, variants)
-    comparison_table("Longfellow vs the ISO-compliant versions", LONGFELLOW_PAIRS, results, scenarios,
-                     variants)
-    comparison_table("VegaSC vs Longfellow and sha256-iso", VEGA_PAIRS, results, scenarios, variants)
+    # order by variant, then scenario
+    results = {f"{v}/{s}": results[f"{v}/{s}"] for v in variants for s in scenarios}
+    data = {"meta": {"runs": args.runs, "date": datetime.date.today().isoformat(),
+                     "machine": machine(), "nargo": tool_version(["nargo", "--version"]),
+                     "bb": tool_version(["bb", "--version"])},
+            "results": results}
+    RESULTS_JSON.write_text(json.dumps(data, indent=1) + "\n")
+    RESULTS_MD.write_text(report(data))
+    print(f"wrote {RESULTS_JSON} and {RESULTS_MD}")
 
 
 if __name__ == "__main__":

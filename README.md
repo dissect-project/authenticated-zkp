@@ -87,7 +87,9 @@ authenticated-zkp/
 │
 └── tests/
     ├── comparison.py         # Benchmarks gates and proving times of every variant
-    ├── comparison-results.txt  # Output of comparison.py
+    ├── comparison-results.md   # Report of comparison.py (summary, every circuit, comparisons)
+    ├── comparison-results.json # Its raw measurements (--report rebuilds the report from them)
+    ├── proving-time.md       # Why proving time does not follow the gate count
     └── testing-app.apk       # Android application (not yet updated to the mDL scenarios)
 ```
 
@@ -105,7 +107,7 @@ In order to generate and verify proofs on a local machine, the following needs t
 cd credentials && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python generate.py                 # Prover.toml and Dart inputs of every circuit
 cd ../implementations/vega/age && nargo execute
-cd ../../../ && python3 tests/comparison.py  # gates and timings of every circuit
+cd ../../../ && python3 tests/comparison.py  # writes tests/comparison-results.md
 ```
 
 ---
