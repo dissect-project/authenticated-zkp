@@ -81,7 +81,7 @@ authenticated-zkp/
 │       └── inputs_*.dart     # Inputs of the four holders (runs 1 to 4)
 │
 ├── scenarios/
-│   └── mdl/                  # The circuits and inputs for the testing application
+│   └── mdl/                  # The circuits and inputs for the testing application (see its README)
 │       ├── circuits/         # Compiled circuits, <variant>_<scenario>.json
 │       └── inputs/           # Dart inputs of every variant, per scenario
 │
