@@ -122,6 +122,10 @@ def ms(samples):
     return statistics.mean(samples) * 1000
 
 
+def median_ms(samples):
+    return statistics.median(samples) * 1000
+
+
 def short_time(samples):
     t = ms(samples)
     return f"{t / 1000:.2f} s" if t >= 1000 else f"{t:.0f} ms"
@@ -149,9 +153,10 @@ def comparison_rows(pairs, results, scenarios):
             a, b = results.get(f"{variant}/{scenario}"), results.get(f"{reference}/{scenario}")
             if a and b:
                 pa, pb = ms(a["times"]["prove"]), ms(b["times"]["prove"])
+                qa, qb = median_ms(a["times"]["prove"]), median_ms(b["times"]["prove"])
                 rows.append([f"{variant} vs {reference}", scenario, f"{b['gates']:,}",
                              f"{a['gates']:,}", f"{a['gates'] / b['gates']:.2f}x", f"{pb:.0f}",
-                             f"{pa:.0f}", f"{pa / pb:.2f}x"])
+                             f"{pa:.0f}", f"{pa / pb:.2f}x", f"{qa / qb:.2f}x"])
     return rows
 
 
@@ -164,7 +169,9 @@ def report(data):
            f"{meta['machine']}, {meta['nargo']}, bb {meta['bb']}. Inputs: holder1 of "
            "`credentials/` (the same credential in every variant).", "",
            "## Summary", "",
-           "Gates (`bb gates`) and mean proving time (`bb prove`) per variant and scenario.", ""]
+           "Gates (`bb gates`) and mean proving time (`bb prove`) per variant and scenario. "
+           "The medians are in the tables below; they differ from the means only where a run was "
+           "slow.", ""]
     out.append(md_table(["Variant"] + scenarios, [
         [VARIANT_LABEL.get(v, v)] + [
             f"{short_gates(results[f'{v}/{s}']['gates'])} · {short_time(results[f'{v}/{s}']['times']['prove'])}"
@@ -174,26 +181,40 @@ def report(data):
     out += ["", f"Verification takes {min(verify):.0f} to {max(verify):.0f} ms (median per "
             "circuit) for every circuit.",
             "", "## Every circuit", "",
-            "Mean ± standard deviation in ms. *Build* is the construction of the circuit from the "
-            "ACIR bytecode (`bb gates`); *Prove* (`bb prove`) includes it, as a mobile prover "
-            "builds the circuit for every proof. *Gates* is the `circuit_size` of `bb gates`. "
-            "Its meaning depends on the Barretenberg version (bb 6 counts a block of about "
-            "15,300 rows whenever SHA-256 is used, which bb 0.84 did not), so gates are "
-            "comparable only within one toolchain. The prover pads the circuit to a power of "
-            "two, so circuits in the same power of two take similar times.", ""]
+            "Times are the mean ± standard deviation in ms, and the median of *Prove*. Each run "
+            "has four steps:", "",
+            "- **Witness** (`nargo execute`): runs the circuit on the holder's inputs and "
+            "computes the witness, the values of every wire. It also checks every constraint, "
+            "so invalid inputs fail here.",
+            "- **Build** (`bb gates`): builds the UltraHonk circuit from Noir's ACIR bytecode, "
+            "with no proof. It is measured on its own to show its share of *Prove*.",
+            "- **Prove** (`bb prove`): builds the circuit again and generates the "
+            "zero-knowledge proof from the witness. It includes *Build*, as a mobile prover "
+            "builds the circuit for every proof. With *Witness*, this is the holder's cost.",
+            "- **Verify** (`bb verify`): checks the proof against the verification key and the "
+            "public inputs. This is the verifier's cost.", "",
+            "*Gates* is the `circuit_size` of `bb gates`. Its meaning depends on the Barretenberg "
+            "version (bb 6 counts a block of about 15,300 rows whenever SHA-256 is used, which "
+            "bb 0.84 did not), so gates are comparable only within one toolchain. The prover pads "
+            "the circuit to a power of two, so circuits in the same power of two take similar "
+            "times.", ""]
     out.append(md_table(
-        ["Circuit", "Gates", "ACIR opcodes", "Witness", "Build", "Prove", "Verify"],
+        ["Circuit", "Gates", "ACIR opcodes", "Witness", "Build", "Prove", "Prove median",
+         "Verify"],
         [[k, f"{r['gates']:,}", f"{r['opcodes']:,}", mean_sd(r["times"]["execute"]),
-          mean_sd(r["times"]["build"]), mean_sd(r["times"]["prove"]), mean_sd(r["times"]["verify"])]
+          mean_sd(r["times"]["build"]), mean_sd(r["times"]["prove"]),
+          f"{median_ms(r['times']['prove']):.1f}", mean_sd(r["times"]["verify"])]
          for k, r in results.items()]))
     header = ["Comparison", "Scenario", "Gates (ref)", "Gates", "Gates ratio", "Prove ms (ref)",
-              "Prove ms", "Prove ratio"]
+              "Prove ms", "Prove ratio", "Prove ratio (median)"]
     for title, pairs in [("Every variant vs base (the cost of authentication)", BASE_PAIRS),
                          ("Longfellow vs the ISO-compliant digests", LONGFELLOW_PAIRS),
                          ("VegaSC vs Longfellow and sha256-iso", VEGA_PAIRS)]:
         rows = comparison_rows(pairs, results, scenarios)
         if rows:
-            out += ["", f"## {title}", "", md_table(header, rows)]
+            out += ["", f"## {title}", "",
+                    "Prove ms are means; the ratios are of the means and of the medians.", "",
+                    md_table(header, rows)]
     return "\n".join(out) + "\n"
 
 
