@@ -21,7 +21,7 @@ Every variant runs four **scenarios**, real mDL presentations, each on an attrib
 
 | Scenario | Use case | Data element | CBOR type | Predicate |
 |---|---|---|---|---|
-| `age` | Online alcohol sale | `birth_date` (`org.iso.18013.5.1`) | full-date (tag 1004) | The holder is at least 21 today |
+| `age` | Alcohol sale | `birth_date` (`org.iso.18013.5.1`) | full-date (tag 1004) | The holder is at least 21 today |
 | `rental` | Car rental | `driving_privileges` (`org.iso.18013.5.1`) | array of maps | A category B privilege held for at least 2 years and valid until the car is returned |
 | `residence` | Resident discount | `resident_postal_code` (`org.iso.18013.5.1`) | text string | The ZIP code (ZIP or ZIP+4) is in the municipality's range |
 | `veteran` | Veteran discount | `veteran` (`org.iso.18013.5.1.aamva`) | unsigned integer | The value is 1 |
