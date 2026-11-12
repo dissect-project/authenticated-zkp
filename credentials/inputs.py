@@ -272,23 +272,29 @@ class Credential:
 
 
 _poseidon_cache = {}
+_hasher = None  # a copy of the hasher program, compiled once per process
 
 
 def poseidon(item):
     """Poseidon digest of the item, from the same Noir code as the poseidon-iso circuits."""
+    global _hasher
     if item not in _poseidon_cache:
-        common = IMPLEMENTATIONS / "iso" / "common"
-        with tempfile.TemporaryDirectory() as tmp:
+        if _hasher is None:
+            common = IMPLEMENTATIONS / "iso" / "common"
+            _hasher = tempfile.TemporaryDirectory()
             for d in ["hasher", "poseidon", "lib"]:
-                shutil.copytree(common / d, Path(tmp) / d, ignore=shutil.ignore_patterns("target"))
-            work = Path(tmp) / "hasher"
-            (work / "Prover.toml").write_text(f"item = {pad(item, 992)}\n")
-            res = subprocess.run(["nargo", "execute"], cwd=work, capture_output=True, text=True)
-            # nargo 1.0 prints the output in hex (0x...), earlier versions as Field(<decimal>)
-            out = res.stdout + res.stderr
-            m = re.search(r"Circuit output: (?:Field\((-?\d+)\)|(0x[0-9a-fA-F]+))", out)
-            if not m:
-                raise SystemExit(f"nargo execute failed in hasher:\n{out}")
-            value = int(m.group(1)) if m.group(1) else int(m.group(2), 16)
-            _poseidon_cache[item] = (value % BN254_P).to_bytes(32, "big")
+                shutil.copytree(common / d, Path(_hasher.name) / d,
+                                ignore=shutil.ignore_patterns("target"))
+            subprocess.run(["nargo", "compile"], cwd=Path(_hasher.name) / "hasher", check=True,
+                           capture_output=True)
+        work = Path(_hasher.name) / "hasher"
+        (work / "Prover.toml").write_text(f"item = {pad(item, 992)}\n")
+        res = subprocess.run(["nargo", "execute"], cwd=work, capture_output=True, text=True)
+        # nargo 1.0 prints the output in hex (0x...), earlier versions as Field(<decimal>)
+        out = res.stdout + res.stderr
+        m = re.search(r"Circuit output: (?:Field\((-?\d+)\)|(0x[0-9a-fA-F]+))", out)
+        if not m:
+            raise SystemExit(f"nargo execute failed in hasher:\n{out}")
+        value = int(m.group(1)) if m.group(1) else int(m.group(2), 16)
+        _poseidon_cache[item] = (value % BN254_P).to_bytes(32, "big")
     return _poseidon_cache[item]

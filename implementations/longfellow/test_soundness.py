@@ -16,6 +16,8 @@ expected assertion:
     `status` entry: a namespace digest map, a later validUntil and the attacker's device key;
     (the namespace itself is part of the public statement, e.g. org.iso.18013.5.1.aamva for
     veteran, and the digest must be a key of that namespace's map in MSO[valueDigests])
+  - fields the issuer signed inside a byte string under `status` (a later validUntil and the
+    attacker's device key), which do not start a CBOR token of the MSO;
 and that an MSO with a 300-byte string (a 2-byte CBOR length) is accepted.
 """
 
@@ -148,6 +150,29 @@ def device_key_in_status():
     return run(w)
 
 
+# ---------------- fields inside a byte string (signed by the issuer under `status`) ----------------
+# With the `status` tests above, these are the four ways of breaking the well-formedness
+# assumption of VegaSC (Section 5), which ../vega/test_soundness.py runs on both circuits.
+
+VALID_UNTIL = b"\x6avalidUntil\xc0\x74" + b"2099-01-01T00:00:00Z"
+
+
+def valid_until_in_bstr():
+    w = fresh(0, "age", status={"data": VALID_UNTIL}).inputs("longfellow")
+    w.update(vu_off=offset_in_status(w, VALID_UNTIL),
+             now_cbor=list(cbor2.dumps(cbor2.CBORTag(0, LATE))))
+    return run(w)
+
+
+def device_key_in_bstr():
+    key = ec.generate_private_key(ec.SECP256R1())
+    field = device_key_field(key)
+    w = fresh(0, "age", status={"data": field}).inputs("longfellow")
+    w["dk_off"] = offset_in_status(w, field)
+    sign_device(w, key)
+    return run(w)
+
+
 def long_string():
     return run(fresh(0, "age", status={"note": "u" * 300}).inputs("longfellow"))
 
@@ -164,6 +189,10 @@ TESTS = [
      lambda: (valid_until_in_status(), "validUntil is not in validityInfo")),
     ("attacker device key signed under MSO[status]",
      lambda: (device_key_in_status(), "deviceKey is not in deviceKeyInfo")),
+    ("later validUntil signed inside a byte string under MSO[status]",
+     lambda: (valid_until_in_bstr(), "validUntil is not a CBOR token")),
+    ("attacker device key signed inside a byte string under MSO[status]",
+     lambda: (device_key_in_bstr(), "deviceKey is not a CBOR token")),
     ("MSO with a 300-byte string", lambda: (long_string(), None)),
 ]
 

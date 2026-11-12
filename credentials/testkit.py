@@ -17,6 +17,7 @@ VARIANT_DIR = {
 }
 _tmp = tempfile.TemporaryDirectory()
 _count = 0
+_compiled = set()  # packages compiled by this process (the sources do not change during a run)
 
 
 def fresh(holder=0, scenario="age", data=None, status=None, device_key=None):
@@ -42,7 +43,9 @@ def flatten(v):
 def execute(variant, scenario, inputs):
     """Runs the circuit on `inputs`. Returns None if it accepts them, else the failed assertion."""
     package = IMPLEMENTATIONS / VARIANT_DIR[variant] / scenario
-    subprocess.run(["nargo", "compile"], cwd=package, check=True, capture_output=True)
+    if package not in _compiled:
+        subprocess.run(["nargo", "compile"], cwd=package, check=True, capture_output=True)
+        _compiled.add(package)
     params = json.loads((package / "target" / f"{scenario}.json").read_text())["abi"]["parameters"]
     toml = "".join(
         f'{p["name"]} = '

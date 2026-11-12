@@ -89,6 +89,8 @@ authenticated-zkp/
     ├── comparison.py         # Benchmarks gates and proving times of every variant
     ├── comparison-results.md   # Report of comparison.py (summary, every circuit, comparisons)
     ├── comparison-results.json # Its raw measurements (--report rebuilds the report from them)
+    ├── soundness.py          # Runs the soundness tests of every variant (iso, longfellow, vega)
+    ├── SOUNDNESS.md          # What the soundness tests check, per implementation
     └── testing-app.apk       # Android application (not yet updated to the mDL scenarios)
 ```
 
@@ -107,6 +109,7 @@ cd credentials && python3 -m venv .venv && .venv/bin/pip install -r requirements
 .venv/bin/python generate.py                 # Prover.toml and Dart inputs of every circuit
 cd ../implementations/vega/age && nargo execute
 cd ../../../ && python3 tests/comparison.py  # writes tests/comparison-results.md
+credentials/.venv/bin/python tests/soundness.py --quiet  # every soundness test
 ```
 
 ---
