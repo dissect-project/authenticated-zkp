@@ -15,6 +15,17 @@ Gates (`bb gates`) and mean proving time (`bb prove`) per variant and scenario. 
 | longfellow | 333k · 1.81 s | 373k · 2.05 s | 333k · 1.78 s | 332k · 1.77 s |
 | vega | 265k · 1.42 s | 316k · 1.67 s | 265k · 1.42 s | 265k · 1.42 s |
 
+Proof generation end to end (*Witness* + *Prove*, defined below), the time a holder waits for a proof with these tools.
+
+| Variant | age | rental | residence | veteran |
+| --- | ---: | ---: | ---: | ---: |
+| base (predicate only) | 216 ms | 297 ms | 215 ms | 214 ms |
+| sha256-iso | 388 ms | 601 ms | 387 ms | 385 ms |
+| sha512-iso | 696 ms | 1.45 s | 699 ms | 701 ms |
+| poseidon-iso | 370 ms | 487 ms | 372 ms | 368 ms |
+| longfellow | 2.18 s | 2.46 s | 2.15 s | 2.14 s |
+| vega | 1.62 s | 1.91 s | 1.62 s | 1.62 s |
+
 Verification takes 12 to 14 ms (median per circuit) for every circuit.
 
 ## Every circuit
@@ -25,35 +36,36 @@ Times are the mean ± standard deviation in ms, and the median of *Prove*. Each 
 - **Build** (`bb gates`): builds the UltraHonk circuit from Noir's ACIR bytecode, with no proof. It is measured on its own to show its share of *Prove*.
 - **Prove** (`bb prove`): builds the circuit again and generates the zero-knowledge proof from the witness. It includes *Build*, as a mobile prover builds the circuit for every proof. With *Witness*, this is the holder's cost.
 - **Verify** (`bb verify`): checks the proof against the verification key and the public inputs. This is the verifier's cost.
+- **Witness + Prove**: the holder's proof generation time, per run. *Build* is not added, since *Prove* includes it. *Witness* includes nargo's start-up, about 160 ms (most of it for the base circuits), which a prover computing the witness in-process would not pay.
 
 *Gates* is the `circuit_size` of `bb gates`. Its meaning depends on the Barretenberg version (bb 6 counts a block of about 15,300 rows whenever SHA-256 is used, which bb 0.84 did not), so gates are comparable only within one toolchain. The prover pads the circuit to a power of two, so circuits in the same power of two take similar times.
 
-| Circuit | Gates | ACIR opcodes | Witness | Build | Prove | Prove median | Verify |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| base/age | 3,222 | 311 | 161.2 ± 2.1 | 8.5 ± 0.2 | 54.8 ± 1.6 | 54.4 | 11.5 ± 0.1 |
-| base/rental | 13,605 | 5,854 | 178.3 ± 1.4 | 15.8 ± 0.1 | 118.7 ± 1.1 | 118.5 | 12.2 ± 0.1 |
-| base/residence | 3,269 | 281 | 159.7 ± 2.0 | 8.2 ± 0.1 | 55.1 ± 0.6 | 54.9 | 11.6 ± 0.1 |
-| base/veteran | 2,935 | 56 | 159.9 ± 1.9 | 8.3 ± 0.3 | 54.1 ± 2.1 | 53.1 | 11.8 ± 0.6 |
-| sha256-iso/age | 33,944 | 2,343 | 170.0 ± 2.4 | 23.8 ± 0.2 | 218.4 ± 8.2 | 215.5 | 12.7 ± 0.4 |
-| sha256-iso/rental | 61,825 | 14,306 | 203.1 ± 1.0 | 56.0 ± 1.1 | 397.7 ± 9.4 | 395.4 | 12.5 ± 0.1 |
-| sha256-iso/residence | 33,944 | 2,333 | 171.2 ± 4.4 | 23.6 ± 0.1 | 216.2 ± 3.9 | 215.1 | 12.4 ± 0.1 |
-| sha256-iso/veteran | 33,944 | 2,054 | 167.9 ± 1.2 | 23.3 ± 0.1 | 217.4 ± 10.2 | 213.0 | 12.5 ± 0.3 |
-| sha512-iso/age | 47,128 | 27,593 | 380.0 ± 1.7 | 45.8 ± 1.3 | 316.4 ± 4.5 | 316.8 | 12.6 ± 0.3 |
-| sha512-iso/rental | 119,500 | 77,205 | 735.5 ± 6.2 | 115.9 ± 2.8 | 710.6 ± 37.1 | 696.2 | 13.1 ± 0.4 |
-| sha512-iso/residence | 47,247 | 27,584 | 382.0 ± 7.6 | 45.6 ± 1.3 | 317.2 ± 5.6 | 316.3 | 12.6 ± 0.5 |
-| sha512-iso/veteran | 46,791 | 27,304 | 378.4 ± 4.2 | 45.7 ± 1.9 | 322.9 ± 38.5 | 312.3 | 12.5 ± 0.3 |
-| poseidon-iso/age | 14,594 | 4,638 | 227.6 ± 2.1 | 23.4 ± 0.3 | 142.3 ± 1.2 | 141.8 | 12.3 ± 0.1 |
-| poseidon-iso/rental | 30,760 | 14,357 | 259.1 ± 3.7 | 36.0 ± 1.1 | 228.3 ± 2.6 | 227.7 | 12.5 ± 0.4 |
-| poseidon-iso/residence | 14,687 | 4,628 | 229.5 ± 4.1 | 23.9 ± 1.3 | 142.5 ± 0.9 | 142.2 | 12.4 ± 0.1 |
-| poseidon-iso/veteran | 14,258 | 4,349 | 227.7 ± 4.1 | 23.1 ± 0.2 | 140.6 ± 1.2 | 140.1 | 12.4 ± 0.3 |
-| longfellow/age | 332,638 | 41,298 | 369.2 ± 5.7 | 291.8 ± 7.9 | 1814.6 ± 77.2 | 1786.6 | 14.2 ± 0.7 |
-| longfellow/rental | 373,416 | 53,222 | 404.3 ± 2.3 | 321.4 ± 6.7 | 2054.4 ± 254.3 | 1963.7 | 14.1 ± 0.7 |
-| longfellow/residence | 332,581 | 41,288 | 371.3 ± 6.2 | 290.2 ± 2.4 | 1778.5 ± 30.1 | 1772.5 | 14.0 ± 0.7 |
-| longfellow/veteran | 332,333 | 41,032 | 370.1 ± 5.9 | 290.3 ± 2.3 | 1771.8 ± 36.5 | 1762.7 | 14.1 ± 0.7 |
-| vega/age | 264,766 | 15,889 | 201.4 ± 2.8 | 196.3 ± 2.3 | 1420.0 ± 20.9 | 1417.9 | 13.3 ± 0.7 |
-| vega/rental | 316,365 | 31,696 | 243.5 ± 3.0 | 230.9 ± 2.2 | 1666.3 ± 25.5 | 1671.2 | 13.6 ± 0.7 |
-| vega/residence | 264,809 | 15,973 | 200.8 ± 1.8 | 196.0 ± 2.9 | 1420.1 ± 22.3 | 1412.3 | 13.4 ± 0.7 |
-| vega/veteran | 264,530 | 15,694 | 200.1 ± 1.2 | 195.7 ± 4.1 | 1418.8 ± 31.9 | 1416.4 | 13.1 ± 0.6 |
+| Circuit | Gates | ACIR opcodes | Witness | Build | Prove | Prove median | Witness + Prove | Verify |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| base/age | 3,222 | 311 | 161.2 ± 2.1 | 8.5 ± 0.2 | 54.8 ± 1.6 | 54.4 | 216.1 ± 3.6 | 11.5 ± 0.1 |
+| base/rental | 13,605 | 5,854 | 178.3 ± 1.4 | 15.8 ± 0.1 | 118.7 ± 1.1 | 118.5 | 296.9 ± 1.3 | 12.2 ± 0.1 |
+| base/residence | 3,269 | 281 | 159.7 ± 2.0 | 8.2 ± 0.1 | 55.1 ± 0.6 | 54.9 | 214.8 ± 2.4 | 11.6 ± 0.1 |
+| base/veteran | 2,935 | 56 | 159.9 ± 1.9 | 8.3 ± 0.3 | 54.1 ± 2.1 | 53.1 | 214.0 ± 3.0 | 11.8 ± 0.6 |
+| sha256-iso/age | 33,944 | 2,343 | 170.0 ± 2.4 | 23.8 ± 0.2 | 218.4 ± 8.2 | 215.5 | 388.4 ± 8.2 | 12.7 ± 0.4 |
+| sha256-iso/rental | 61,825 | 14,306 | 203.1 ± 1.0 | 56.0 ± 1.1 | 397.7 ± 9.4 | 395.4 | 600.8 ± 9.9 | 12.5 ± 0.1 |
+| sha256-iso/residence | 33,944 | 2,333 | 171.2 ± 4.4 | 23.6 ± 0.1 | 216.2 ± 3.9 | 215.1 | 387.4 ± 7.6 | 12.4 ± 0.1 |
+| sha256-iso/veteran | 33,944 | 2,054 | 167.9 ± 1.2 | 23.3 ± 0.1 | 217.4 ± 10.2 | 213.0 | 385.3 ± 10.3 | 12.5 ± 0.3 |
+| sha512-iso/age | 47,128 | 27,593 | 380.0 ± 1.7 | 45.8 ± 1.3 | 316.4 ± 4.5 | 316.8 | 696.4 ± 4.7 | 12.6 ± 0.3 |
+| sha512-iso/rental | 119,500 | 77,205 | 735.5 ± 6.2 | 115.9 ± 2.8 | 710.6 ± 37.1 | 696.2 | 1446.1 ± 39.6 | 13.1 ± 0.4 |
+| sha512-iso/residence | 47,247 | 27,584 | 382.0 ± 7.6 | 45.6 ± 1.3 | 317.2 ± 5.6 | 316.3 | 699.2 ± 11.1 | 12.6 ± 0.5 |
+| sha512-iso/veteran | 46,791 | 27,304 | 378.4 ± 4.2 | 45.7 ± 1.9 | 322.9 ± 38.5 | 312.3 | 701.3 ± 41.0 | 12.5 ± 0.3 |
+| poseidon-iso/age | 14,594 | 4,638 | 227.6 ± 2.1 | 23.4 ± 0.3 | 142.3 ± 1.2 | 141.8 | 369.9 ± 2.3 | 12.3 ± 0.1 |
+| poseidon-iso/rental | 30,760 | 14,357 | 259.1 ± 3.7 | 36.0 ± 1.1 | 228.3 ± 2.6 | 227.7 | 487.4 ± 5.4 | 12.5 ± 0.4 |
+| poseidon-iso/residence | 14,687 | 4,628 | 229.5 ± 4.1 | 23.9 ± 1.3 | 142.5 ± 0.9 | 142.2 | 372.0 ± 4.8 | 12.4 ± 0.1 |
+| poseidon-iso/veteran | 14,258 | 4,349 | 227.7 ± 4.1 | 23.1 ± 0.2 | 140.6 ± 1.2 | 140.1 | 368.4 ± 5.1 | 12.4 ± 0.3 |
+| longfellow/age | 332,638 | 41,298 | 369.2 ± 5.7 | 291.8 ± 7.9 | 1814.6 ± 77.2 | 1786.6 | 2183.8 ± 80.2 | 14.2 ± 0.7 |
+| longfellow/rental | 373,416 | 53,222 | 404.3 ± 2.3 | 321.4 ± 6.7 | 2054.4 ± 254.3 | 1963.7 | 2458.7 ± 253.8 | 14.1 ± 0.7 |
+| longfellow/residence | 332,581 | 41,288 | 371.3 ± 6.2 | 290.2 ± 2.4 | 1778.5 ± 30.1 | 1772.5 | 2149.7 ± 30.4 | 14.0 ± 0.7 |
+| longfellow/veteran | 332,333 | 41,032 | 370.1 ± 5.9 | 290.3 ± 2.3 | 1771.8 ± 36.5 | 1762.7 | 2142.0 ± 39.6 | 14.1 ± 0.7 |
+| vega/age | 264,766 | 15,889 | 201.4 ± 2.8 | 196.3 ± 2.3 | 1420.0 ± 20.9 | 1417.9 | 1621.3 ± 20.6 | 13.3 ± 0.7 |
+| vega/rental | 316,365 | 31,696 | 243.5 ± 3.0 | 230.9 ± 2.2 | 1666.3 ± 25.5 | 1671.2 | 1909.7 ± 27.1 | 13.6 ± 0.7 |
+| vega/residence | 264,809 | 15,973 | 200.8 ± 1.8 | 196.0 ± 2.9 | 1420.1 ± 22.3 | 1412.3 | 1621.0 ± 22.2 | 13.4 ± 0.7 |
+| vega/veteran | 264,530 | 15,694 | 200.1 ± 1.2 | 195.7 ± 4.1 | 1418.8 ± 31.9 | 1416.4 | 1618.9 ± 32.3 | 13.1 ± 0.6 |
 
 ## Every variant vs base (the cost of authentication)
 

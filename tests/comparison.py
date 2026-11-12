@@ -126,6 +126,11 @@ def median_ms(samples):
     return statistics.median(samples) * 1000
 
 
+def end_to_end(times):
+    """Per-run witness generation plus proving: the holder's proof generation time."""
+    return [w + p for w, p in zip(times["execute"], times["prove"])]
+
+
 def short_time(samples):
     t = ms(samples)
     return f"{t / 1000:.2f} s" if t >= 1000 else f"{t:.0f} ms"
@@ -177,6 +182,13 @@ def report(data):
             f"{short_gates(results[f'{v}/{s}']['gates'])} · {short_time(results[f'{v}/{s}']['times']['prove'])}"
             if f"{v}/{s}" in results else "" for s in scenarios]
         for v in variants], ["l"] + ["r"] * len(scenarios)))
+    out += ["", "Proof generation end to end (*Witness* + *Prove*, defined below), the time a "
+            "holder waits for a proof with these tools.", ""]
+    out.append(md_table(["Variant"] + scenarios, [
+        [VARIANT_LABEL.get(v, v)] + [
+            short_time(end_to_end(results[f"{v}/{s}"]["times"])) if f"{v}/{s}" in results else ""
+            for s in scenarios]
+        for v in variants], ["l"] + ["r"] * len(scenarios)))
     verify = [statistics.median(r["times"]["verify"]) * 1000 for r in results.values()]
     out += ["", f"Verification takes {min(verify):.0f} to {max(verify):.0f} ms (median per "
             "circuit) for every circuit.",
@@ -192,7 +204,11 @@ def report(data):
             "zero-knowledge proof from the witness. It includes *Build*, as a mobile prover "
             "builds the circuit for every proof. With *Witness*, this is the holder's cost.",
             "- **Verify** (`bb verify`): checks the proof against the verification key and the "
-            "public inputs. This is the verifier's cost.", "",
+            "public inputs. This is the verifier's cost.",
+            "- **Witness + Prove**: the holder's proof generation time, per run. *Build* is not "
+            "added, since *Prove* includes it. *Witness* includes nargo's start-up, about 160 ms "
+            "(most of it for the base circuits), which a prover computing the witness "
+            "in-process would not pay.", "",
             "*Gates* is the `circuit_size` of `bb gates`. Its meaning depends on the Barretenberg "
             "version (bb 6 counts a block of about 15,300 rows whenever SHA-256 is used, which "
             "bb 0.84 did not), so gates are comparable only within one toolchain. The prover pads "
@@ -200,10 +216,11 @@ def report(data):
             "times.", ""]
     out.append(md_table(
         ["Circuit", "Gates", "ACIR opcodes", "Witness", "Build", "Prove", "Prove median",
-         "Verify"],
+         "Witness + Prove", "Verify"],
         [[k, f"{r['gates']:,}", f"{r['opcodes']:,}", mean_sd(r["times"]["execute"]),
           mean_sd(r["times"]["build"]), mean_sd(r["times"]["prove"]),
-          f"{median_ms(r['times']['prove']):.1f}", mean_sd(r["times"]["verify"])]
+          f"{median_ms(r['times']['prove']):.1f}", mean_sd(end_to_end(r["times"])),
+          mean_sd(r["times"]["verify"])]
          for k, r in results.items()]))
     header = ["Comparison", "Scenario", "Gates (ref)", "Gates", "Gates ratio", "Prove ms (ref)",
               "Prove ms", "Prove ratio", "Prove ratio (median)"]
