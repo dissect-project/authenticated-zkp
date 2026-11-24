@@ -3,9 +3,14 @@
 
 The variants are base (the predicate only), the ISO/IEC 18013-5 item digests sha256-iso,
 sha512-iso and poseidon-iso (the latter for comparison only), and the ports of longfellow and vega,
-all run on the same credentials (../credentials). Every variant is compared with base (the cost
-of authentication), longfellow with the ISO-compliant digests (sha256-iso and sha512-iso), and vega
-with longfellow and sha256-iso. For each circuit it reports the number of gates (bb gates) and the
+all run on the same credentials (../credentials). The report has two comparisons:
+
+1. Hash functions: base, sha256-iso, sha512-iso and poseidon-iso, each against base (the cost of
+   authenticating the attribute with each digest).
+2. Related work: base, sha256-iso, longfellow and vega, all with SHA-256, the ports against
+   sha256-iso (the cost of each design's relation on the same backend).
+
+For each circuit it reports the number of gates (bb gates) and the
 average time to generate the witness (nargo execute), to build the circuit from the ACIR
 bytecode (bb gates), to generate the zero-knowledge proof (bb prove, which includes building the
 circuit) and to verify it (bb verify), on holder1's inputs (Prover.toml). The circuits are copied to a temporary
@@ -41,18 +46,31 @@ VARIANT_DIR = {
     "base": "base", "sha256-iso": "iso/sha256", "sha512-iso": "iso/sha512",
     "poseidon-iso": "iso/poseidon", "longfellow": "longfellow", "vega": "vega",
 }
-# Comparison tables printed at the end, as (variant, reference) pairs. poseidon-iso uses a digest
-# algorithm that ISO 18013-5 does not allow, so longfellow is compared only with the ISO-compliant
-# digests.
-BASE_PAIRS = [(v, "base") for v in VARIANTS[1:]]
 VARIANT_LABEL = {"base": "base (predicate only)"}
+# The two comparisons of the report: title, introduction, the variants shown and the
+# (variant, reference) pairs of its ratio table
+COMPARISONS = [
+    ("Comparison 1: hash functions",
+     "Our ISO/IEC 18013-5 variants with each digest algorithm, against base. The circuit proves "
+     "that the hidden item hashes to the digest in the MSO and satisfies the predicate. "
+     "poseidon-iso uses a digest algorithm that ISO/IEC 18013-5 does not allow, and is shown for "
+     "comparison only.",
+     ["base", "sha256-iso", "sha512-iso", "poseidon-iso"],
+     [("sha256-iso", "base"), ("sha512-iso", "base"), ("poseidon-iso", "base")]),
+    ("Comparison 2: related work",
+     "sha256-iso against the Noir ports of Longfellow and VegaSC, all three with SHA-256 over the "
+     "same compression primitive and the same backend (UltraHonk). Each port proves its paper's "
+     "relation (SHA-256 of the MSO, both ECDSA signatures, and MSO parsing or field lookups) but "
+     "not with the paper's proof system, so the ratios measure the cost of each relation, not "
+     "the performance of the original Longfellow and Vega provers.",
+     ["base", "sha256-iso", "longfellow", "vega"],
+     [("sha256-iso", "base"), ("longfellow", "sha256-iso"), ("vega", "sha256-iso")]),
+]
 RESULTS_JSON = ROOT / "tests" / "comparison-results.json"
 # Barretenberg's verifier target: UltraHonk with zero knowledge and Poseidon2 transcripts (the
 # default of bb 6; the -no-zk targets would drop zero knowledge)
 TARGET = "noir-recursive"
 RESULTS_MD = ROOT / "tests" / "comparison-results.md"
-LONGFELLOW_PAIRS = [("longfellow", "sha256-iso"), ("longfellow", "sha512-iso")]
-VEGA_PAIRS = [("vega", "longfellow"), ("vega", "sha256-iso")]
 
 
 def run(cmd, cwd):
@@ -172,27 +190,37 @@ def report(data):
     out = ["# Benchmark results", "",
            f"`tests/comparison.py`, {meta['runs']} runs per circuit, {meta['date']}, "
            f"{meta['machine']}, {meta['nargo']}, bb {meta['bb']}. Inputs: holder1 of "
-           "`credentials/` (the same credential in every variant).", "",
-           "## Summary", "",
-           "Gates (`bb gates`) and mean proving time (`bb prove`) per variant and scenario. "
-           "The medians are in the tables below; they differ from the means only where a run was "
-           "slow.", ""]
-    out.append(md_table(["Variant"] + scenarios, [
-        [VARIANT_LABEL.get(v, v)] + [
-            f"{short_gates(results[f'{v}/{s}']['gates'])} · {short_time(results[f'{v}/{s}']['times']['prove'])}"
-            if f"{v}/{s}" in results else "" for s in scenarios]
-        for v in variants], ["l"] + ["r"] * len(scenarios)))
-    out += ["", "Proof generation end to end (*Witness* + *Prove*, defined below), the time a "
-            "holder waits for a proof with these tools.", ""]
-    out.append(md_table(["Variant"] + scenarios, [
-        [VARIANT_LABEL.get(v, v)] + [
-            short_time(end_to_end(results[f"{v}/{s}"]["times"])) if f"{v}/{s}" in results else ""
-            for s in scenarios]
-        for v in variants], ["l"] + ["r"] * len(scenarios)))
+           "`credentials/` (the same credential in every variant).", ""]
     verify = [statistics.median(r["times"]["verify"]) * 1000 for r in results.values()]
-    out += ["", f"Verification takes {min(verify):.0f} to {max(verify):.0f} ms (median per "
-            "circuit) for every circuit.",
-            "", "## Every circuit", "",
+    out += [f"Verification takes {min(verify):.0f} to {max(verify):.0f} ms (median per "
+            "circuit) for every circuit. The steps are defined under *Every circuit*.", ""]
+    header = ["Comparison", "Scenario", "Gates (ref)", "Gates", "Gates ratio", "Prove ms (ref)",
+              "Prove ms", "Prove ratio", "Prove ratio (median)"]
+    for title, intro, group, pairs in COMPARISONS:
+        shown = [v for v in group if v in variants]
+        if not shown:
+            continue
+        out += [f"## {title}", "", intro, "",
+                "Gates (`bb gates`) and mean proving time (`bb prove`) per variant and scenario.",
+                ""]
+        out.append(md_table(["Variant"] + scenarios, [
+            [VARIANT_LABEL.get(v, v)] + [
+                f"{short_gates(results[f'{v}/{s}']['gates'])} · {short_time(results[f'{v}/{s}']['times']['prove'])}"
+                if f"{v}/{s}" in results else "" for s in scenarios]
+            for v in shown], ["l"] + ["r"] * len(scenarios)))
+        out += ["", "Proof generation end to end (*Witness* + *Prove*), the time a holder waits "
+                "for a proof with these tools.", ""]
+        out.append(md_table(["Variant"] + scenarios, [
+            [VARIANT_LABEL.get(v, v)] + [
+                short_time(end_to_end(results[f"{v}/{s}"]["times"])) if f"{v}/{s}" in results
+                else "" for s in scenarios]
+            for v in shown], ["l"] + ["r"] * len(scenarios)))
+        rows = comparison_rows(pairs, results, scenarios)
+        if rows:
+            out += ["", "Ratios against the reference. Prove ms are means; the ratios are of the "
+                    "means and of the medians.", "", md_table(header, rows)]
+        out.append("")
+    out += ["## Every circuit", "",
             "Times are the mean ± standard deviation in ms, and the median of *Prove*. Each run "
             "has four steps:", "",
             "- **Witness** (`nargo execute`): runs the circuit on the holder's inputs and "
@@ -222,16 +250,6 @@ def report(data):
           f"{median_ms(r['times']['prove']):.1f}", mean_sd(end_to_end(r["times"])),
           mean_sd(r["times"]["verify"])]
          for k, r in results.items()]))
-    header = ["Comparison", "Scenario", "Gates (ref)", "Gates", "Gates ratio", "Prove ms (ref)",
-              "Prove ms", "Prove ratio", "Prove ratio (median)"]
-    for title, pairs in [("Every variant vs base (the cost of authentication)", BASE_PAIRS),
-                         ("Longfellow vs the ISO-compliant digests", LONGFELLOW_PAIRS),
-                         ("VegaSC vs Longfellow and sha256-iso", VEGA_PAIRS)]:
-        rows = comparison_rows(pairs, results, scenarios)
-        if rows:
-            out += ["", f"## {title}", "",
-                    "Prove ms are means; the ratios are of the means and of the medians.", "",
-                    md_table(header, rows)]
     return "\n".join(out) + "\n"
 
 
