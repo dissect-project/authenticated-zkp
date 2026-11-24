@@ -80,18 +80,21 @@ authenticated-zkp/
 │       ├── Prover.toml       # Inputs of holder1
 │       └── inputs_*.dart     # Inputs of the four holders (runs 1 to 4)
 │
+├── results/                  # Raw results of the mobile performance tests (see tests/METHODOLOGY.md)
+│   ├── performance_p7a.json  # Pixel 7a
+│   └── performance_p10pro.json # Pixel 10 Pro
+│
 ├── scenarios/
 │   └── mdl/                  # The circuits and inputs for the testing application (see its README)
 │       ├── circuits/         # Compiled circuits, <variant>_<scenario>.json
 │       └── inputs/           # Dart inputs of every variant, per scenario
 │
 └── tests/
-    ├── comparison.py         # Benchmarks gates and proving times of every variant
-    ├── comparison-results.md   # Report of comparison.py (summary, every circuit, comparisons)
-    ├── comparison-results.json # Its raw measurements (--report rebuilds the report from them)
+    ├── comparison.py         # Desktop benchmark: gates and proving times of every variant
+    ├── METHODOLOGY.md        # Methodology of the mobile performance tests
     ├── soundness.py          # Runs the soundness tests of every variant (iso, longfellow, vega)
     ├── SOUNDNESS.md          # What the soundness tests check, per implementation
-    └── testing-app.apk       # Android application (not yet updated to the mDL scenarios)
+    └── testing-app.apk       # Android application for the mobile performance tests
 ```
 
 ---
@@ -108,7 +111,7 @@ In order to generate and verify proofs on a local machine, the following needs t
 cd credentials && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python generate.py                 # Prover.toml and Dart inputs of every circuit
 cd ../implementations/vega/age && nargo execute
-cd ../../../ && python3 tests/comparison.py  # writes tests/comparison-results.md
+cd ../../../ && python3 tests/comparison.py  # desktop benchmark, writes tests/comparison-results.md
 credentials/.venv/bin/python tests/soundness.py --quiet  # every soundness test
 ```
 
@@ -116,6 +119,8 @@ credentials/.venv/bin/python tests/soundness.py --quiet  # every soundness test
 
 ## Running the Testing Application
 
-The testing application was developed to be installed on Android devices only. Currently, there is no iOS version. After installing the application, the desired tests can be selected, as well as the number of executions. The results are then written to a `.json` file in the testing device. The path is displayed in a message box. The image below demonstrates how this can be done. The application has not yet been updated to the mDL scenarios of `scenarios/mdl`.
+The testing application (`tests/testing-app.apk`) runs the mobile performance tests on Android; there is no iOS version. It proves the circuits of `scenarios/mdl/circuits` on holder 1's inputs with Noir 1.0.0 and Barretenberg 6.0.0 (through zkPassport `noir_rs`), the same toolchain as the desktop benchmark. The implementations, scenarios and number of runs can be selected; the application checks the device conditions before starting, and writes the results to a `.json` file that can be shared from the device.
+
+The methodology of the tests is in [`tests/METHODOLOGY.md`](tests/METHODOLOGY.md), and the results for the Pixel 7a and Pixel 10 Pro are in [`results/`](results/).
 
 <img src="docs/testing-app.png" alt="Testing application screenshot" width="200" />
