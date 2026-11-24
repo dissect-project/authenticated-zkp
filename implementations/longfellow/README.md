@@ -3,7 +3,7 @@
 A Noir port of the mdoc presentation relation of Longfellow-zk (Frigo & shelat, *Anonymous
 Credentials from ECDSA*, IACR CiC 3(1), Algorithm 10), proven with UltraHonk like every other
 variant in this repository. What is ported is the **relation** the paper proves, not its proof
-system. `../../docs/papers/PORTED.md` covers both ports and every departure in detail.
+system.
 
 ```
 longfellow/
@@ -83,8 +83,6 @@ The port departs from the paper in two ways:
   uses Noir's P-256 black box; the parser walks tokens instead of using parallel-prefix scans.
 - **Relation.** The attribute value stays private behind a predicate, whereas Algorithm 10
   discloses it. The item preimage is ISO's `IssuerSignedItemBytes`, parsed as issued.
-
-See `PORTED.md` for both.
 
 ## Usage
 

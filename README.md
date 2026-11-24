@@ -15,8 +15,6 @@ Six variants are implemented. Variants are named as in the benchmark (`tests/com
 | `longfellow` | SHA-256 + in-circuit ECDSA P-256 | Noir port of the Longfellow-zk mdoc circuit: the issuer-signed MSO is parsed in the circuit with path checks, and the issuer and device signatures are verified |
 | `vega` | SHA-256 + in-circuit ECDSA P-256 | Noir port of the VegaSC mdoc circuit (Figure 9a of the Vega paper): length-hiding SHA-256, lookup-based field extraction without CBOR parsing, issuer and device signatures in-circuit |
 
-`docs/papers/PORTED.md` explains how the two ports follow their papers, and `docs/papers/NOT_PORTED.md` why Crescent and VegaMC are not ported.
-
 Every variant runs four **scenarios**, real mDL presentations, each on an attribute of a different CBOR type:
 
 | Scenario | Use case | Data element | CBOR type | Predicate |
@@ -43,10 +41,8 @@ authenticated-zkp/
 │   ├── testkit.py            # Helpers of the soundness tests
 │   └── holders/  pki/        # The issued credentials (committed)
 ├── docs/
-│   ├── papers/               # Longfellow, Crescent and Vega papers
-│   │   ├── PORTED.md         # How Longfellow and VegaSC were ported, and every departure
-│   │   └── NOT_PORTED.md     # Why Crescent and VegaMC are not ported
-│   └── testing-app.png       # Screenshot of the testing application
+│   ├── testing-app-main.png  # Screenshot of the testing application: test selection
+│   └── testing-app-run.png   # Screenshot of the testing application: a test running
 ├── implementations/
 │   ├── base/                 # The predicate only (variant base)
 │   │   └── age/  rental/  residence/  veteran/
@@ -123,4 +119,5 @@ The testing application (`tests/testing-app.apk`) runs the mobile performance te
 
 The methodology of the tests is in [`tests/METHODOLOGY.md`](tests/METHODOLOGY.md), and the results for the Pixel 7a and Pixel 10 Pro are in [`results/`](results/).
 
-<img src="docs/testing-app.png" alt="Testing application screenshot" width="200" />
+<img src="docs/testing-app-main.png" alt="Testing application: test selection" width="200" />
+<img src="docs/testing-app-run.png" alt="Testing application: a test running" width="200" />
